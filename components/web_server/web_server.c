@@ -127,10 +127,14 @@ static bool require_authorized(httpd_req_t *request)
 static esp_err_t static_handler(httpd_req_t *request)
 {
     const static_asset_t *asset = request->user_ctx;
+    size_t length = (size_t)(asset->end - asset->start);
+    if (length > 0U && asset->start[length - 1U] == '\0') {
+        --length;
+    }
     httpd_resp_set_type(request, asset->content_type);
-    httpd_resp_set_hdr(request, "Cache-Control", "no-cache");
+    httpd_resp_set_hdr(request, "Cache-Control", "no-store");
     return httpd_resp_send(request, (const char *)asset->start,
-                           (ssize_t)(asset->end - asset->start));
+                           (ssize_t)length);
 }
 
 static esp_err_t system_handler(httpd_req_t *request)
