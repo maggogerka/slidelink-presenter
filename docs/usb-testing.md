@@ -49,3 +49,14 @@ Open a presentation containing at least 12 slides.
 
 Record the Windows version, PowerPoint version, board model and cable/port used
 in `docs/compatibility.md` when a full pass is completed.
+
+## Recorded run: 2026-07-18
+
+Windows 10 Pro build 19045 and PowerPoint 16.0 build 14332 passed native USB
+enumeration, every command in the table, 200 alternating Next/Previous
+commands, five board resets and a reset while commands were queued. No stale
+command replay or spontaneous slide movement was observed.
+
+Physical cable removal and Windows sleep/resume still require an operator and
+remain explicitly pending in the compatibility matrix. A board reset exercises
+USB detach/re-enumeration but is not recorded as a cable-removal substitute.
