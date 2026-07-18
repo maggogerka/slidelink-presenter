@@ -59,9 +59,12 @@ queued. Device Manager reported a started HID keyboard at
 `HID\\VID_303A&PID_4004`. No stale command replay or spontaneous slide movement
 was observed.
 
-Physical cable removal and Windows sleep/resume still require an operator and
-remain explicitly pending in the compatibility matrix. A board reset exercises
-USB detach/re-enumeration but is not recorded as a cable-removal substitute.
+The physical follow-up filled the queue to depth eight, then removed native USB.
+The firmware observed session 1→2 on detach, cleared the queue, remounted as
+session 3 and kept the queue empty without stale replay. Windows then entered
+sleep for about 23 seconds (Kernel-Power event 42 and Power-Troubleshooter event
+1). After resume, HID was mounted, ready and not suspended; a new command moved
+PowerPoint from slide 1 to slide 2. The full v0.1.0 checklist is complete.
 
 ## v0.2.0 web-path checks
 
