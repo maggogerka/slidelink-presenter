@@ -20,7 +20,7 @@ const uint8_t slidelink_hid_report_descriptor[] = {
 
 const uint8_t slidelink_configuration_descriptor[] = {
     TUD_CONFIG_DESCRIPTOR(1, USB_HID_INTERFACE_COUNT, 0, USB_CONFIG_TOTAL_LEN,
-                          TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
+                          0, 100),
     TUD_HID_DESCRIPTOR(USB_HID_INTERFACE_NUMBER, 4, true,
                        sizeof(slidelink_hid_report_descriptor),
                        USB_HID_ENDPOINT_IN, USB_HID_ENDPOINT_SIZE,

@@ -17,9 +17,9 @@ jobs:
           . "$IDF_PATH/export.sh"
           idf.py set-target esp32s3
           idf.py build
-      - name: Build on-device tests
+      - name: Compile on-device test firmware (not executed in CI)
         shell: bash
         run: |
           . "$IDF_PATH/export.sh"
-          idf.py -C tests -B ../build-tests set-target esp32s3
-          idf.py -C tests -B ../build-tests build
+          idf.py -C tests -B build-tests set-target esp32s3
+          idf.py -C tests -B build-tests build

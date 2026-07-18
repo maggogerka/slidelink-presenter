@@ -26,6 +26,17 @@ void usb_hid_test_set_tap_delay_ms(uint32_t delay_ms)
 }
 
 esp_err_t usb_hid_init(void) { return ESP_OK; }
+void usb_hid_get_state(usb_hid_state_t *state)
+{
+    if (state != NULL) {
+        *state = (usb_hid_state_t) {
+            .mounted = s_mounted,
+            .suspended = false,
+            .session = s_session,
+            .disconnects = 0,
+        };
+    }
+}
 bool usb_hid_is_mounted(void) { return s_mounted; }
 bool usb_hid_is_ready(void) { return s_mounted; }
 bool usb_hid_is_suspended(void) { return false; }

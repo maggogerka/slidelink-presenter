@@ -25,6 +25,10 @@ tap has a bounded sequence:
 5. Send the all-keys-released report and wait for completion.
 6. Attempt another release report on any transfer error.
 
+All lifecycle fields are copied under one spinlock as a coherent snapshot.
+The configuration descriptor deliberately does not advertise USB remote wakeup:
+commands are rejected while the host is suspended and work again after resume.
+
 ### `presenter`
 
 Maps the fixed presentation command enum to HID usages. It has no knowledge of

@@ -11,6 +11,7 @@
 #include "command_router.h"
 #include "driver/uart.h"
 #include "driver/uart_vfs.h"
+#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -19,6 +20,11 @@
 #include "usb_hid.h"
 
 static const char *TAG = "CONSOLE";
+
+static const char *firmware_version(void)
+{
+    return esp_app_get_description()->version;
+}
 
 static void print_help(void)
 {
@@ -32,7 +38,7 @@ static void print_status(void)
 {
     command_router_stats_t stats;
     command_router_get_stats(&stats);
-    printf("firmware: 0.1.0\n"
+    printf("firmware: %s\n"
            "usb: %s\n"
            "hid: %s\n"
            "queue_depth: %" PRIu32 "\n"
@@ -46,13 +52,14 @@ static void print_status(void)
            "last_command_id: %" PRIu32 "\n"
            "last_error: %s\n"
            "uptime_ms: %" PRIu32 "\n",
+           firmware_version(),
            usb_hid_is_mounted() ? "mounted" : "not-mounted",
            usb_hid_is_ready() ? "ready" : "not-ready",
            command_router_queue_depth(), stats.commands_received,
            stats.commands_accepted, stats.commands_executed,
            stats.commands_rejected, stats.commands_failed,
            stats.queue_overflows, stats.usb_disconnects,
-           stats.last_command_id, stats.last_error,
+           stats.last_command_id, command_router_error_name(stats.last_error),
            (uint32_t)(esp_timer_get_time() / 1000));
 }
 
@@ -71,17 +78,17 @@ static void process_line(const char *line)
         return;
     }
     if (parsed.result == CONSOLE_PARSE_ERROR_TOO_LONG) {
-        command_router_record_rejected("command too long");
+        command_router_record_rejected(COMMAND_ERROR_COMMAND_TOO_LONG);
         printf("ERR command too long; maximum 64 characters\n");
         return;
     }
     if (parsed.result == CONSOLE_PARSE_ERROR_SLIDE_NUMBER) {
-        command_router_record_rejected("invalid slide number");
+        command_router_record_rejected(COMMAND_ERROR_INVALID_SLIDE_NUMBER);
         printf("ERR invalid slide number; expected 1..9999\n");
         return;
     }
     if (parsed.result == CONSOLE_PARSE_ERROR_UNSUPPORTED) {
-        command_router_record_rejected("unsupported command");
+        command_router_record_rejected(COMMAND_ERROR_UNSUPPORTED_COMMAND);
         printf("ERR unsupported command\n");
         return;
     }
@@ -112,8 +119,8 @@ static void console_task(void *argument)
     size_t length = 0;
     bool overflow = false;
 
-    printf("\nSlideLink v0.1.0\nUSB state: %s\nProfile: PowerPoint\n\n> ",
-           usb_hid_is_mounted() ? "mounted" : "not mounted");
+    printf("\nSlideLink v%s\nUSB state: %s\nProfile: PowerPoint\n\n> ",
+           firmware_version(), usb_hid_is_mounted() ? "mounted" : "not mounted");
     fflush(stdout);
 
     while (true) {

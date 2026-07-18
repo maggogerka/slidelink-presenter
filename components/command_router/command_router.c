@@ -5,7 +5,6 @@
 #include "command_router.h"
 
 #include <inttypes.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
@@ -28,21 +27,39 @@ static portMUX_TYPE s_stats_lock = portMUX_INITIALIZER_UNLOCKED;
 static command_router_stats_t s_stats;
 static uint32_t s_next_id = 1;
 
-static void set_last_error_locked(const char *reason)
+static void set_last_error_locked(command_router_error_t error)
 {
-    (void)snprintf(s_stats.last_error, sizeof(s_stats.last_error), "%s",
-                   reason != NULL ? reason : "none");
+    s_stats.last_error = error;
 }
 
-static void record_rejected_internal(const char *reason)
+static void record_rejected_internal(command_router_error_t error)
 {
     portENTER_CRITICAL(&s_stats_lock);
     ++s_stats.commands_rejected;
-    set_last_error_locked(reason);
+    set_last_error_locked(error);
     portEXIT_CRITICAL(&s_stats_lock);
 }
 
-static void discard_stale_commands(uint32_t stale_session, const char *reason)
+const char *command_router_error_name(command_router_error_t error)
+{
+    switch (error) {
+    case COMMAND_ERROR_NONE: return "none";
+    case COMMAND_ERROR_INVALID_COMMAND: return "invalid command";
+    case COMMAND_ERROR_USB_NOT_MOUNTED: return "usb not mounted";
+    case COMMAND_ERROR_USB_DISCONNECTED: return "usb disconnected";
+    case COMMAND_ERROR_QUEUE_FULL: return "command queue full";
+    case COMMAND_ERROR_HID_TIMEOUT: return "hid endpoint timeout";
+    case COMMAND_ERROR_ROUTER_BUSY: return "router busy";
+    case COMMAND_ERROR_COMMAND_TOO_LONG: return "command too long";
+    case COMMAND_ERROR_INVALID_SLIDE_NUMBER: return "invalid slide number";
+    case COMMAND_ERROR_UNSUPPORTED_COMMAND: return "unsupported command";
+    case COMMAND_ERROR_EXECUTION_FAILED: return "execution failed";
+    default: return "unknown";
+    }
+}
+
+static void discard_stale_commands(uint32_t stale_session,
+                                   command_router_error_t error)
 {
     if (xSemaphoreTake(s_submit_mutex, portMAX_DELAY) != pdTRUE) {
         return;
@@ -51,8 +68,10 @@ static void discard_stale_commands(uint32_t stale_session, const char *reason)
     size_t retained_count = 0;
     uint32_t discarded = 0;
     queued_command_t queued;
+    usb_hid_state_t usb_state;
+    usb_hid_get_state(&usb_state);
     while (xQueueReceive(s_queue, &queued, 0) == pdTRUE) {
-        if (queued.usb_session == stale_session || !usb_hid_is_mounted()) {
+        if (queued.usb_session == stale_session || !usb_state.mounted) {
             ++discarded;
         } else {
             retained[retained_count++] = queued;
@@ -66,10 +85,10 @@ static void discard_stale_commands(uint32_t stale_session, const char *reason)
     if (discarded > 0) {
         portENTER_CRITICAL(&s_stats_lock);
         s_stats.commands_failed += discarded;
-        set_last_error_locked(reason);
+        set_last_error_locked(error);
         portEXIT_CRITICAL(&s_stats_lock);
         ESP_LOGW(TAG, "discarded %u queued command(s): %s",
-                 (unsigned)discarded, reason);
+                 (unsigned)discarded, command_router_error_name(error));
     }
 }
 
@@ -85,7 +104,9 @@ static void command_worker(void *argument)
 
         const int64_t started_us = esp_timer_get_time();
         esp_err_t err;
-        if (!usb_hid_is_mounted() || item.usb_session != usb_hid_session()) {
+        usb_hid_state_t usb_state;
+        usb_hid_get_state(&usb_state);
+        if (!usb_state.mounted || item.usb_session != usb_state.session) {
             err = ESP_ERR_INVALID_STATE;
         } else {
             err = presenter_execute(&item.command);
@@ -95,23 +116,26 @@ static void command_worker(void *argument)
         if (err == ESP_OK) {
             portENTER_CRITICAL(&s_stats_lock);
             ++s_stats.commands_executed;
-            set_last_error_locked("none");
+            set_last_error_locked(COMMAND_ERROR_NONE);
             portEXIT_CRITICAL(&s_stats_lock);
             ESP_LOGI("USB_HID", "executed id=%" PRIu32 " duration_ms=%" PRIu32,
                      item.command.id, duration_ms);
         } else {
-            const char *reason = (err == ESP_ERR_TIMEOUT) ? "hid endpoint timeout" :
-                                 (err == ESP_ERR_INVALID_STATE) ? "usb disconnected" :
-                                 esp_err_to_name(err);
+            const command_router_error_t error =
+                (err == ESP_ERR_TIMEOUT) ? COMMAND_ERROR_HID_TIMEOUT :
+                (err == ESP_ERR_INVALID_STATE) ? COMMAND_ERROR_USB_DISCONNECTED :
+                COMMAND_ERROR_EXECUTION_FAILED;
             usb_hid_release_all();
             portENTER_CRITICAL(&s_stats_lock);
             ++s_stats.commands_failed;
-            set_last_error_locked(reason);
+            set_last_error_locked(error);
             portEXIT_CRITICAL(&s_stats_lock);
             ESP_LOGE("USB_HID", "failed id=%" PRIu32 " error=%s duration_ms=%" PRIu32,
-                     item.command.id, reason, duration_ms);
-            if (!usb_hid_is_mounted() || item.usb_session != usb_hid_session()) {
-                discard_stale_commands(item.usb_session, "usb disconnected");
+                     item.command.id, command_router_error_name(error), duration_ms);
+            usb_hid_get_state(&usb_state);
+            if (!usb_state.mounted || item.usb_session != usb_state.session) {
+                discard_stale_commands(item.usb_session,
+                                       COMMAND_ERROR_USB_DISCONNECTED);
             }
         }
     }
@@ -138,7 +162,7 @@ esp_err_t command_router_init(void)
     }
 
     memset(&s_stats, 0, sizeof(s_stats));
-    set_last_error_locked("none");
+    set_last_error_locked(COMMAND_ERROR_NONE);
     if (xTaskCreate(command_worker, "presenter_cmd", 4096, NULL, 5, NULL) != pdPASS) {
         vQueueDelete(s_queue);
         vSemaphoreDelete(s_submit_mutex);
@@ -161,17 +185,19 @@ esp_err_t command_router_submit(presenter_command_type_t type,
     if (s_queue == NULL || type < 0 || type >= PRESENTER_COMMAND_TYPE_COUNT ||
         (type == PRESENTER_COMMAND_GOTO_SLIDE &&
          (slide_number < 1 || slide_number > 9999))) {
-        record_rejected_internal("invalid command");
+        record_rejected_internal(COMMAND_ERROR_INVALID_COMMAND);
         return ESP_ERR_INVALID_ARG;
     }
 
     if (xSemaphoreTake(s_submit_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
-        record_rejected_internal("router busy");
+        record_rejected_internal(COMMAND_ERROR_ROUTER_BUSY);
         return ESP_ERR_TIMEOUT;
     }
-    if (!usb_hid_is_mounted()) {
+    usb_hid_state_t usb_state;
+    usb_hid_get_state(&usb_state);
+    if (!usb_state.mounted) {
         xSemaphoreGive(s_submit_mutex);
-        record_rejected_internal("usb not mounted");
+        record_rejected_internal(COMMAND_ERROR_USB_NOT_MOUNTED);
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -180,7 +206,7 @@ esp_err_t command_router_submit(presenter_command_type_t type,
         portENTER_CRITICAL(&s_stats_lock);
         ++s_stats.commands_rejected;
         ++s_stats.queue_overflows;
-        set_last_error_locked("command queue full");
+        set_last_error_locked(COMMAND_ERROR_QUEUE_FULL);
         portEXIT_CRITICAL(&s_stats_lock);
         return ESP_ERR_NO_MEM;
     }
@@ -191,7 +217,7 @@ esp_err_t command_router_submit(presenter_command_type_t type,
             .slide_number = slide_number,
             .created_at_ms = (uint32_t)(esp_timer_get_time() / 1000),
         },
-        .usb_session = usb_hid_session(),
+        .usb_session = usb_state.session,
     };
 
     portENTER_CRITICAL(&s_stats_lock);
@@ -206,7 +232,7 @@ esp_err_t command_router_submit(presenter_command_type_t type,
         portENTER_CRITICAL(&s_stats_lock);
         ++s_stats.commands_rejected;
         ++s_stats.queue_overflows;
-        set_last_error_locked("command queue full");
+        set_last_error_locked(COMMAND_ERROR_QUEUE_FULL);
         portEXIT_CRITICAL(&s_stats_lock);
         return ESP_ERR_NO_MEM;
     }
@@ -215,7 +241,7 @@ esp_err_t command_router_submit(presenter_command_type_t type,
     portENTER_CRITICAL(&s_stats_lock);
     ++s_stats.commands_accepted;
     s_stats.last_command_id = item.command.id;
-    set_last_error_locked("none");
+    set_last_error_locked(COMMAND_ERROR_NONE);
     portEXIT_CRITICAL(&s_stats_lock);
     if (command_id != NULL) {
         *command_id = item.command.id;
@@ -226,12 +252,12 @@ esp_err_t command_router_submit(presenter_command_type_t type,
     return ESP_OK;
 }
 
-void command_router_record_rejected(const char *reason)
+void command_router_record_rejected(command_router_error_t error)
 {
     portENTER_CRITICAL(&s_stats_lock);
     ++s_stats.commands_received;
     ++s_stats.commands_rejected;
-    set_last_error_locked(reason);
+    set_last_error_locked(error);
     portEXIT_CRITICAL(&s_stats_lock);
 }
 

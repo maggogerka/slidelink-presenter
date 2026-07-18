@@ -3,6 +3,7 @@
  */
 
 #include "command_router.h"
+#include "esp_app_desc.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "presenter_button.h"
@@ -13,7 +14,7 @@ static const char *TAG = "SLIDELINK";
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "SlideLink v0.1.0 starting");
+    ESP_LOGI(TAG, "SlideLink v%s starting", esp_app_get_description()->version);
 
     ESP_ERROR_CHECK(usb_hid_init());
     ESP_ERROR_CHECK(command_router_init());

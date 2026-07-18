@@ -7,7 +7,15 @@
 
 #define USB_HID_READY_TIMEOUT_MS 250U
 
+typedef struct {
+    bool mounted;
+    bool suspended;
+    uint32_t session;
+    uint32_t disconnects;
+} usb_hid_state_t;
+
 esp_err_t usb_hid_init(void);
+void usb_hid_get_state(usb_hid_state_t *state);
 bool usb_hid_is_mounted(void);
 bool usb_hid_is_ready(void);
 bool usb_hid_is_suspended(void);

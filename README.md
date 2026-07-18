@@ -100,6 +100,11 @@ idf.py -C tests -B build-tests build
 idf.py -C tests -B build-tests -p COM10 flash monitor
 ```
 
+GitHub Actions compiles both the production image and the on-device test image.
+It has no attached ESP32-S3, so it does **not** execute the Unity suite. A test
+run is counted only after the test image is flashed to real hardware and its
+UART output reports the passing test count.
+
 After testing, restore production firmware with `idf.py -p COM10 flash` from
 the repository root. See [docs/usb-testing.md](docs/usb-testing.md) for the
 full Windows and PowerPoint checklist.

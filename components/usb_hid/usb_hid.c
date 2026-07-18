@@ -9,7 +9,6 @@
 #include <string.h>
 
 #include "class/hid/hid_device.h"
-#include "esp_check.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_timer.h"
@@ -26,10 +25,7 @@ extern const uint8_t slidelink_configuration_descriptor[];
 static const char *TAG = "USB_HID";
 static SemaphoreHandle_t s_report_complete;
 static portMUX_TYPE s_state_lock = portMUX_INITIALIZER_UNLOCKED;
-static volatile bool s_mounted;
-static volatile bool s_suspended;
-static volatile uint32_t s_session;
-static volatile uint32_t s_disconnects;
+static usb_hid_state_t s_state;
 static char s_serial[12];
 static const char *s_string_descriptor[] = {
     (const char[]){0x09, 0x04},
@@ -45,32 +41,36 @@ static void tinyusb_event_handler(tinyusb_event_t *event, void *argument)
     switch (event->id) {
     case TINYUSB_EVENT_ATTACHED:
         portENTER_CRITICAL(&s_state_lock);
-        s_mounted = true;
-        s_suspended = false;
-        ++s_session;
-        const uint32_t mounted_session = s_session;
+        s_state.mounted = true;
+        s_state.suspended = false;
+        ++s_state.session;
+        const uint32_t mounted_session = s_state.session;
         portEXIT_CRITICAL(&s_state_lock);
         ESP_LOGI(TAG, "mounted session=%" PRIu32, mounted_session);
         break;
     case TINYUSB_EVENT_DETACHED:
         portENTER_CRITICAL(&s_state_lock);
-        s_mounted = false;
-        s_suspended = false;
-        ++s_session;
-        ++s_disconnects;
-        const uint32_t detached_session = s_session;
+        s_state.mounted = false;
+        s_state.suspended = false;
+        ++s_state.session;
+        ++s_state.disconnects;
+        const uint32_t detached_session = s_state.session;
         portEXIT_CRITICAL(&s_state_lock);
         ESP_LOGW(TAG, "disconnected session=%" PRIu32, detached_session);
         break;
 #ifdef CONFIG_TINYUSB_SUSPEND_CALLBACK
     case TINYUSB_EVENT_SUSPENDED:
-        s_suspended = true;
+        portENTER_CRITICAL(&s_state_lock);
+        s_state.suspended = true;
+        portEXIT_CRITICAL(&s_state_lock);
         ESP_LOGI(TAG, "suspended");
         break;
 #endif
 #ifdef CONFIG_TINYUSB_RESUME_CALLBACK
     case TINYUSB_EVENT_RESUMED:
-        s_suspended = false;
+        portENTER_CRITICAL(&s_state_lock);
+        s_state.suspended = false;
+        portEXIT_CRITICAL(&s_state_lock);
         ESP_LOGI(TAG, "resumed");
         break;
 #endif
@@ -152,35 +152,47 @@ esp_err_t usb_hid_init(void)
 
 bool usb_hid_is_mounted(void)
 {
-    return s_mounted && tud_mounted();
+    usb_hid_state_t state;
+    usb_hid_get_state(&state);
+    return state.mounted && tud_mounted();
 }
 
 bool usb_hid_is_ready(void)
 {
-    return usb_hid_is_mounted() && !s_suspended && tud_hid_ready();
+    usb_hid_state_t state;
+    usb_hid_get_state(&state);
+    return state.mounted && !state.suspended && tud_mounted() && tud_hid_ready();
 }
 
 bool usb_hid_is_suspended(void)
 {
-    return s_suspended;
+    usb_hid_state_t state;
+    usb_hid_get_state(&state);
+    return state.suspended;
+}
+
+void usb_hid_get_state(usb_hid_state_t *state)
+{
+    if (state == NULL) {
+        return;
+    }
+    portENTER_CRITICAL(&s_state_lock);
+    *state = s_state;
+    portEXIT_CRITICAL(&s_state_lock);
 }
 
 uint32_t usb_hid_session(void)
 {
-    uint32_t value;
-    portENTER_CRITICAL(&s_state_lock);
-    value = s_session;
-    portEXIT_CRITICAL(&s_state_lock);
-    return value;
+    usb_hid_state_t state;
+    usb_hid_get_state(&state);
+    return state.session;
 }
 
 uint32_t usb_hid_disconnect_count(void)
 {
-    uint32_t value;
-    portENTER_CRITICAL(&s_state_lock);
-    value = s_disconnects;
-    portEXIT_CRITICAL(&s_state_lock);
-    return value;
+    usb_hid_state_t state;
+    usb_hid_get_state(&state);
+    return state.disconnects;
 }
 
 esp_err_t usb_hid_tap(uint8_t modifier, uint8_t keycode)

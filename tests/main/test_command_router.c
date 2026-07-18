@@ -38,4 +38,7 @@ TEST_CASE("router generates IDs and rejects queue overflow", "[router]")
     TEST_ASSERT_EQUAL_UINT32(accepted, stats.commands_accepted);
     TEST_ASSERT_EQUAL_UINT32(1, stats.queue_overflows);
     TEST_ASSERT_EQUAL_UINT32(previous_id, stats.last_command_id);
+    TEST_ASSERT_EQUAL(COMMAND_ERROR_QUEUE_FULL, stats.last_error);
+    TEST_ASSERT_EQUAL_STRING("command queue full",
+                             command_router_error_name(stats.last_error));
 }

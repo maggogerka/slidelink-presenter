@@ -36,16 +36,16 @@ Open a presentation containing at least 12 slides.
 
 ## Robustness
 
-1. Send 100 alternating `next`/`previous` commands. Some may be explicitly
+1. Send 200 alternating `next`/`previous` commands. Some may be explicitly
    rejected when the queue is full; the firmware must not hang or leave a key
    held.
-2. Disconnect native USB while commands are queued. Reconnect it and verify no
-   old command is replayed.
+2. Fill all eight pending-command slots, then disconnect native USB while the
+   queue is non-empty. Reconnect it and verify no old command is replayed.
 3. Suspend and resume Windows; verify new commands work after resume.
 4. Try `goto 0`, `goto -5`, `goto 10000`, `goto abc`, an unknown command and a
    65-character line. Verify each is rejected and no slide changes.
-5. Reset the board repeatedly with PowerPoint focused. Verify no spontaneous
-   slide movement.
+5. Reset the board at least five times with PowerPoint focused. Verify no
+   spontaneous slide movement.
 
 Record the Windows version, PowerPoint version, board model and cable/port used
 in `docs/compatibility.md` when a full pass is completed.
