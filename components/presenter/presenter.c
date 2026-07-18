@@ -185,28 +185,26 @@ esp_err_t presenter_profile_validate(const presenter_profile_t *profile)
         (profile->goto_enabled && !presenter_keycode_allowed(profile->goto_submit_key))) {
         return ESP_ERR_INVALID_ARG;
     }
-    uint32_t command_total;
     for (int type = PRESENTER_COMMAND_NEXT; type < PRESENTER_COMMAND_GOTO_SLIDE; ++type) {
         const presenter_binding_t *binding = presenter_profile_binding_const(
             profile, (presenter_command_type_t)type);
-        if (binding == NULL || binding->step_count > PROFILE_MAX_STEPS ||
-            (binding->enabled && binding->step_count == 0)) {
-            return ESP_ERR_INVALID_ARG;
-        }
-        command_total = 0;
-        for (uint8_t step = 0; step < binding->step_count; ++step) {
-            if (!presenter_keycode_allowed(binding->steps[step].keycode) ||
-                (binding->steps[step].modifier & ~ALLOWED_MODIFIERS) != 0 ||
-                binding->steps[step].delay_after_ms > 1000) {
-                return ESP_ERR_INVALID_ARG;
-            }
-            command_total += binding->steps[step].delay_after_ms;
-        }
-        if (command_total > 2000) {
-            return ESP_ERR_INVALID_ARG;
-        }
+        if (presenter_binding_validate(binding) != ESP_OK) return ESP_ERR_INVALID_ARG;
     }
     return ESP_OK;
+}
+
+esp_err_t presenter_binding_validate(const presenter_binding_t *binding)
+{
+    if (binding == NULL || binding->step_count > PROFILE_MAX_STEPS ||
+        (binding->enabled && binding->step_count == 0)) return ESP_ERR_INVALID_ARG;
+    uint32_t total = 0;
+    for (uint8_t step = 0; step < binding->step_count; ++step) {
+        if (!presenter_keycode_allowed(binding->steps[step].keycode) ||
+            (binding->steps[step].modifier & ~ALLOWED_MODIFIERS) != 0 ||
+            binding->steps[step].delay_after_ms > 1000) return ESP_ERR_INVALID_ARG;
+        total += binding->steps[step].delay_after_ms;
+    }
+    return total <= 2000 ? ESP_OK : ESP_ERR_INVALID_ARG;
 }
 
 esp_err_t presenter_init(const presenter_profile_t *profile)
@@ -288,6 +286,22 @@ static esp_err_t execute_goto(const presenter_profile_t *profile, uint16_t numbe
     return usb_hid_tap(0, profile->goto_submit_key);
 }
 
+esp_err_t presenter_execute_binding(const presenter_binding_t *binding)
+{
+    if (presenter_binding_validate(binding) != ESP_OK || !binding->enabled) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    for (uint8_t i = 0; i < binding->step_count; ++i) {
+        esp_err_t err = usb_hid_tap(binding->steps[i].modifier,
+                                    binding->steps[i].keycode);
+        if (err != ESP_OK) return err;
+        if (binding->steps[i].delay_after_ms > 0) {
+            vTaskDelay(pdMS_TO_TICKS(binding->steps[i].delay_after_ms));
+        }
+    }
+    return ESP_OK;
+}
+
 esp_err_t presenter_execute(const presenter_command_t *command)
 {
     if (command == NULL || command->type < 0 ||
@@ -304,13 +318,5 @@ esp_err_t presenter_execute(const presenter_command_t *command)
     if (binding == NULL || !binding->enabled || binding->step_count == 0) {
         return ESP_ERR_NOT_SUPPORTED;
     }
-    for (uint8_t i = 0; i < binding->step_count; ++i) {
-        esp_err_t err = usb_hid_tap(binding->steps[i].modifier,
-                                    binding->steps[i].keycode);
-        if (err != ESP_OK) return err;
-        if (binding->steps[i].delay_after_ms > 0) {
-            vTaskDelay(pdMS_TO_TICKS(binding->steps[i].delay_after_ms));
-        }
-    }
-    return ESP_OK;
+    return presenter_execute_binding(binding);
 }

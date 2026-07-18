@@ -86,6 +86,7 @@ esp_err_t presenter_set_profile(const presenter_profile_t *profile);
 void presenter_get_profile(presenter_profile_t *profile);
 void presenter_profile_factory(uint32_t id, presenter_profile_t *profile);
 esp_err_t presenter_profile_validate(const presenter_profile_t *profile);
+esp_err_t presenter_binding_validate(const presenter_binding_t *binding);
 presenter_binding_t *presenter_profile_binding(presenter_profile_t *profile,
                                                presenter_command_type_t type);
 const presenter_binding_t *presenter_profile_binding_const(
@@ -93,6 +94,7 @@ const presenter_binding_t *presenter_profile_binding_const(
 bool presenter_keycode_allowed(uint8_t keycode);
 esp_err_t presenter_keycode_from_name(const char *name, uint8_t *keycode);
 const char *presenter_keycode_name(uint8_t keycode);
+esp_err_t presenter_execute_binding(const presenter_binding_t *binding);
 esp_err_t presenter_execute(const presenter_command_t *command);
 
 #ifdef __cplusplus
