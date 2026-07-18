@@ -81,6 +81,11 @@ results. The profile editor supports up to four allowlisted key steps per
 binding, Shift/Ctrl/Alt modifiers and bounded delays. A binding can be tested
 without saving it.
 
+![SlideLink autonomous web remote connected to PowerPoint](docs/assets/slidelink-web-remote.png)
+
+*SlideLink v0.2.0 running locally at `192.168.4.1`, with USB HID ready and the
+PowerPoint profile active.*
+
 Profile updates pause command intake, clear queued work, release all keys and
 then atomically publish the new profile revision. A queued command from an old
 profile revision is never replayed against the new mapping.
