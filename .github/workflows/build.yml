@@ -1,0 +1,25 @@
+name: build
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v6.0.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production firmware
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py set-target esp32s3
+          idf.py build
+      - name: Compile on-device test firmware (not executed in CI)
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py -C tests -B build-tests set-target esp32s3
+          idf.py -C tests -B build-tests build

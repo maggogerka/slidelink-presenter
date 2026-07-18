@@ -51,5 +51,16 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+# ESP-IDF generated files
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+/build-tests/
+
+# Editors and local tooling
+.vscode/
+.idea/
+
 # debug information files
 *.dwo
