@@ -49,3 +49,29 @@ Open a presentation containing at least 12 slides.
 
 Record the Windows version, PowerPoint version, board model and cable/port used
 in `docs/compatibility.md` when a full pass is completed.
+
+## Recorded run: 2026-07-18
+
+The automated hardware-assisted run on Windows 10 Pro build 19045 and
+PowerPoint 16.0 build 14332 passed every command above, 200 alternating
+Next/Previous commands, five board resets and a reset while commands were
+queued. Device Manager reported a started HID keyboard at
+`HID\\VID_303A&PID_4004`. No stale command replay or spontaneous slide movement
+was observed.
+
+Physical cable removal and Windows sleep/resume still require an operator and
+remain explicitly pending in the compatibility matrix. A board reset exercises
+USB detach/re-enumeration but is not recorded as a cable-removal substitute.
+
+## v0.2.0 web-path checks
+
+1. Connect to the autonomous SoftAP and load all four embedded assets.
+2. Complete setup, authenticate and verify that unauthenticated protected calls
+   are rejected.
+3. Read six profiles; edit, test, save and activate Custom 1.
+4. Reset the board and verify the edited profile and active ID persisted.
+5. Restore the factory profile and PowerPoint as active.
+6. Confirm command acceptance and final result messages use the same request ID.
+
+These checks passed on the same board. Minimum free heap observed during the
+web/API run was 240,148 bytes.

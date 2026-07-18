@@ -1,63 +1,64 @@
 # Architecture
 
-SlideLink separates command input, presentation intent and USB transport so
-future web or CYD inputs cannot bypass validation or send raw HID reports.
+SlideLink separates inputs, presentation intent, persistent configuration and
+USB transport. Neither the web API nor UART can submit arbitrary HID reports.
 
 ```text
-UART parser ─┐
-             ├─> command_router (ID + queue[8] + statistics) ─> presenter ─> usb_hid
-BOOT button ─┘                                                     │
-                                                                  └─> TinyUSB
+UART console ----\
+BOOT button ------> command_router --> presenter/profile snapshot --> usb_hid --> TinyUSB
+HTTP API --------/        |                         ^
+                          +--> WebSocket results    |
+web UI --> session auth --> web_server --> profile_store (NVS + CRC32)
+                 |              |
+                 +--> Wi-Fi AP --+--> device_state
 ```
 
 ## Components
 
 ### `usb_hid`
 
-Owns the keyboard report/configuration descriptors, TinyUSB lifecycle, partial
-chip-derived serial number, mount/suspend state and USB session counter. A key
-tap has a bounded sequence:
+Owns descriptors, TinyUSB lifecycle, chip-derived serial, coherent USB-state
+snapshots and the session counter. A key tap has bounded endpoint waits, a
+20 ms hold and an explicit all-keys-released report. Any transport failure
+attempts another release. The descriptor does not advertise remote wakeup;
+commands are rejected while the host is suspended.
 
-1. Reject if USB is not mounted.
-2. Wait at most 250 ms for the HID endpoint.
-3. Send the pressed report and wait for transfer completion.
-4. Hold for 20 ms.
-5. Send the all-keys-released report and wait for completion.
-6. Attempt another release report on any transfer error.
+### `presenter` and `profile_store`
 
-All lifecycle fields are copied under one spinlock as a coherent snapshot.
-The configuration descriptor deliberately does not advertise USB remote wakeup:
-commands are rejected while the host is suspended and work again after resume.
-
-### `presenter`
-
-Maps the fixed presentation command enum to HID usages. It has no knowledge of
-UART syntax or the queue. `goto` emits each decimal digit and then Enter.
+`presenter` validates and executes presentation bindings. Profiles contain no
+more than four steps per action and use only the key/modifier allowlist. Per-step
+and total delays are bounded. `profile_store` keeps six fixed-ID profiles, the
+active ID, a schema version and CRC32 in one NVS blob. Invalid or incompatible
+storage is replaced with factory defaults.
 
 ### `command_router`
 
-Allocates monotonically increasing non-zero IDs, accepts at most eight pending
-items, runs one worker and collects statistics. Each queue item records the
-current USB session. A detach changes the session; stale items are rejected and
-the rest of the queue is cleared, even if the device reconnects quickly.
+Allocates non-zero request IDs, accepts at most eight pending items and runs one
+worker. Each item snapshots USB session, profile ID and profile revision.
+Disconnects, resets and profile changes invalidate queued work. Result callbacks
+publish `executed` or `failed` with duration and an error enum; formatting is
+outside critical sections.
 
-### `presenter_console`
+### `session_manager`, `wifi_manager` and `web_server`
 
-Reads UART0 through the ESP-IDF UART VFS. The parser is case-insensitive for
-command names, enforces the 64-character limit and never exposes raw HID input.
-`status` and `help` do not enter the execution queue.
+`session_manager` owns provisioning, PIN verification, login throttling and up
+to four RAM-only session tokens. `wifi_manager` creates a WPA2/PMF SoftAP with
+at most two clients and advertises `slidelink.local` by mDNS. `web_server`
+serves compiled-in assets plus the authenticated JSON API and WebSocket.
 
-### `presenter_button`
+### `presenter_console` and `presenter_button`
 
-Polls GPIO0 every 10 ms, applies 40 ms debounce and produces one event on
-release. It remains disarmed until GPIO0 has first been released, preventing a
-download-mode/boot hold from becoming a presentation command.
+The console retains the bounded v0.1 UART parser and reports the ESP-IDF project
+version. GPIO0 is sampled every 10 ms with 40 ms debounce. It stays disarmed
+until released after boot. Short and one-second holds submit Next/Previous; an
+eight-second hold erases security/profile configuration and restarts.
 
-## Failure behavior
+## Concurrency and failure behavior
 
-- Not mounted: reject before enqueue.
-- Endpoint busy: bounded 250 ms wait, then fail and release all keys.
-- Disconnect during execution: abort, attempt release, invalidate the session,
-  clear pending items.
-- Full queue: reject the new item; never overwrite an older command.
-- Reset: queue and statistics are RAM-only, and no key reports are sent at boot.
+- USB lifecycle state is copied under one `portMUX` as a coherent snapshot.
+- Profile data is protected by mutexes and published to `presenter` atomically.
+- Profile changes pause command intake, clear the queue and release all keys.
+- Endpoint busy waits are bounded; errors cannot leave a key intentionally held.
+- Queue full rejects the new item and never overwrites an old command.
+- Reset loses all RAM queue/session state; no key report is emitted at boot.
+- Static assets require no CDN, DNS server or Internet connection.
