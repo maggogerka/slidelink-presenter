@@ -24,13 +24,15 @@ Only combinations actually exercised should be marked verified.
 | PowerPoint end-to-end | Pass: all commands and 200 alternating switches |
 | Five resets with PowerPoint open | Pass: no spontaneous movement |
 | Reset with queued commands | Pass: no stale replay after reconnect |
-| Physical native-USB cable removal with a full queue | Pending physical operator step |
-| Windows sleep/resume | Pending physical operator step |
+| Physical native-USB cable removal with a full queue | Pass: depth 8, detach session 1→2, remount session 3, queue remained empty |
+| Windows sleep/resume | Pass: Windows event IDs 42/1 and post-resume HID advanced PowerPoint |
 
 The Unity result above is from a manual run on the ESP32-S3 over COM10. CI only
 compiles the test firmware; it cannot execute these hardware tests.
 
 The PowerPoint run created a 12-slide presentation and observed every command
 through the PowerPoint object model while input travelled through the real
-native USB HID device. Reset testing confirms detach/re-enumeration and stale
-queue handling, but is not reported as a physical cable-removal test.
+native USB HID device. The physical cable test filled all eight queue slots,
+observed TinyUSB detach/remount and verified an empty queue five seconds after
+reconnection. Windows recorded sleep at 06:42:14 and wake at 06:42:32; the
+first post-resume HID command advanced PowerPoint from slide 1 to slide 2.
