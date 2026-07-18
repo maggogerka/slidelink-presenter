@@ -179,6 +179,7 @@ void usb_hid_get_state(usb_hid_state_t *state)
     portENTER_CRITICAL(&s_state_lock);
     *state = s_state;
     portEXIT_CRITICAL(&s_state_lock);
+    state->mounted = state->mounted && tud_mounted();
 }
 
 uint32_t usb_hid_session(void)
