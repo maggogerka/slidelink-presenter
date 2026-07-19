@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 set(EXTRA_COMPONENT_DIRS
     "../components/command_router"
     "../components/presenter"
+    "../components/profile_store"
     "../components/presenter_console"
     "components/usb_hid")
 

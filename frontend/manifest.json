@@ -1,0 +1,8 @@
+{
+  "name": "SlideLink Presenter",
+  "short_name": "SlideLink",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090c12",
+  "theme_color": "#090c12"
+}

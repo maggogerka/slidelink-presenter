@@ -18,8 +18,16 @@
 #define BUTTON_SAMPLE_MS       10U
 #define BUTTON_DEBOUNCE_MS     40U
 #define BUTTON_LONG_PRESS_MS   1000U
+#define BUTTON_FACTORY_RESET_MS 8000U
 
 static const char *TAG = "BUTTON";
+static presenter_button_factory_reset_callback_t s_factory_reset_callback;
+
+void presenter_button_set_factory_reset_callback(
+    presenter_button_factory_reset_callback_t callback)
+{
+    s_factory_reset_callback = callback;
+}
 
 static void button_task(void *argument)
 {
@@ -46,9 +54,17 @@ static void button_task(void *argument)
                     armed = true;
                 } else if (pressed_since_ms != 0) {
                     const uint32_t held_ms = now_ms - pressed_since_ms;
-                    const presenter_command_type_t type =
-                        held_ms >= BUTTON_LONG_PRESS_MS ?
-                        PRESENTER_COMMAND_PREVIOUS : PRESENTER_COMMAND_NEXT;
+                    if (held_ms >= BUTTON_FACTORY_RESET_MS &&
+                        s_factory_reset_callback != NULL) {
+                        ESP_LOGW(TAG, "factory reset requested press_ms=%" PRIu32,
+                                 held_ms);
+                        s_factory_reset_callback();
+                        pressed_since_ms = 0;
+                        continue;
+                    }
+                    const presenter_command_type_t type = held_ms >=
+                        BUTTON_LONG_PRESS_MS ? PRESENTER_COMMAND_PREVIOUS :
+                        PRESENTER_COMMAND_NEXT;
                     uint32_t id = 0;
                     const esp_err_t err = command_router_submit(type, 0, &id);
                     if (err == ESP_OK) {
@@ -83,6 +99,6 @@ esp_err_t presenter_button_init(void)
     if (xTaskCreate(button_task, "presenter_button", 3072, NULL, 3, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
-    ESP_LOGI(TAG, "BOOT button initialized short=next long=previous");
+    ESP_LOGI(TAG, "BOOT button initialized short=next long=previous reset=8s");
     return ESP_OK;
 }

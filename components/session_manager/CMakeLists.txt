@@ -1,5 +1,5 @@
-idf_component_register(SRCS "presenter.c"
+idf_component_register(SRCS "session_manager.c"
                        INCLUDE_DIRS "include"
-                       REQUIRES freertos usb_hid)
+                       REQUIRES esp_timer mbedtls nvs_flash)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)

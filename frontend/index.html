@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#090c12">
+  <title>SlideLink</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section id="setupView" class="gate hidden">
+      <div class="brand-mark">SL</div>
+      <p class="eyebrow">FIRST-RUN SETUP</p>
+      <h1>Secure your SlideLink</h1>
+      <p class="muted">Choose a private Wi-Fi password and a control PIN. The device restarts once.</p>
+      <form id="setupForm">
+        <label>New Wi-Fi password<input id="wifiPassword" type="password" minlength="8" maxlength="63" required autocomplete="new-password"></label>
+        <label>Control PIN<input id="setupPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="new-password"></label>
+        <button class="primary" type="submit">Save and restart</button>
+      </form>
+    </section>
+
+    <section id="loginView" class="gate">
+      <div class="brand-mark">SL</div>
+      <p class="eyebrow">LOCAL PRESENTER</p>
+      <h1>SlideLink</h1>
+      <p class="muted">Enter the control PIN. It never leaves this local Wi-Fi network.</p>
+      <form id="loginForm">
+        <label>Control PIN<input id="loginPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="current-password"></label>
+        <button class="primary" type="submit">Connect</button>
+      </form>
+      <noscript><p class="muted">JavaScript is required. Enable it and reload this page.</p></noscript>
+    </section>
+
+    <section id="remoteView" class="remote hidden">
+      <header>
+        <div><p class="eyebrow">SLIDELINK</p><h1 id="deviceName">Presenter</h1></div>
+        <div class="status-stack"><span id="wsStatus" class="pill offline">Offline</span><span id="usbStatus" class="pill offline">USB off</span></div>
+      </header>
+      <div class="profile-row">
+        <select id="profileSelect" aria-label="Active profile"></select>
+        <button id="settingsButton" class="icon-button" aria-label="Edit profile">⚙</button>
+      </div>
+      <section class="navigation">
+        <button class="command previous" data-action="previous">PREVIOUS</button>
+        <button class="command next" data-action="next">NEXT</button>
+      </section>
+      <section class="quick-grid">
+        <button class="command" data-action="start">Start</button>
+        <button class="command" data-action="start-current">Current</button>
+        <button class="command" data-action="black">Black</button>
+        <button class="command danger" data-action="stop">Stop</button>
+      </section>
+      <form id="gotoForm" class="goto-row">
+        <label>Slide<input id="slideNumber" type="number" min="1" max="9999" inputmode="numeric" placeholder="12" required></label>
+        <button type="submit">GO</button>
+      </form>
+      <section class="timer-card">
+        <div><p class="eyebrow">TIMER</p><output id="timerOutput">00:00</output></div>
+        <div class="timer-actions"><button id="timerToggle">Start</button><button id="timerReset">Reset</button></div>
+      </section>
+      <p id="resultLine" class="result">Ready</p>
+      <p class="estimate">Slide numbers are commands, not PowerPoint feedback.</p>
+    </section>
+  </main>
+
+  <dialog id="profileDialog">
+    <form method="dialog" class="dialog-head"><div><p class="eyebrow">LIVE PROFILE</p><h2>Edit controls</h2></div><button class="icon-button" value="cancel">×</button></form>
+    <div class="dialog-body">
+      <label>Profile name<input id="profileName" maxlength="23"></label>
+      <div id="bindingEditor"></div>
+      <label>Confirm PIN<input id="editPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}"></label>
+      <div class="dialog-actions"><button id="resetProfile" class="danger">Factory profile</button><button id="saveProfile" class="primary">Save profile</button></div>
+    </div>
+  </dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

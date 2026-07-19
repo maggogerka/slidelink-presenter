@@ -52,10 +52,12 @@ in `docs/compatibility.md` when a full pass is completed.
 
 ## Recorded run: 2026-07-18
 
-Windows 10 Pro build 19045 and PowerPoint 16.0 build 14332 passed native USB
-enumeration, every command in the table, 200 alternating Next/Previous
-commands, five board resets and a reset while commands were queued. No stale
-command replay or spontaneous slide movement was observed.
+The automated hardware-assisted run on Windows 10 Pro build 19045 and
+PowerPoint 16.0 build 14332 passed every command above, 200 alternating
+Next/Previous commands, five board resets and a reset while commands were
+queued. Device Manager reported a started HID keyboard at
+`HID\\VID_303A&PID_4004`. No stale command replay or spontaneous slide movement
+was observed.
 
 The physical follow-up filled the queue to depth eight, then removed native USB.
 The firmware observed session 1→2 on detach, cleared the queue, remounted as
@@ -63,3 +65,16 @@ session 3 and kept the queue empty without stale replay. Windows then entered
 sleep for about 23 seconds (Kernel-Power event 42 and Power-Troubleshooter event
 1). After resume, HID was mounted, ready and not suspended; a new command moved
 PowerPoint from slide 1 to slide 2. The full v0.1.0 checklist is complete.
+
+## v0.2.0 web-path checks
+
+1. Connect to the autonomous SoftAP and load all four embedded assets.
+2. Complete setup, authenticate and verify that unauthenticated protected calls
+   are rejected.
+3. Read six profiles; edit, test, save and activate Custom 1.
+4. Reset the board and verify the edited profile and active ID persisted.
+5. Restore the factory profile and PowerPoint as active.
+6. Confirm command acceptance and final result messages use the same request ID.
+
+These checks passed on the same board. Minimum free heap observed during the
+web/API run was 240,148 bytes.
