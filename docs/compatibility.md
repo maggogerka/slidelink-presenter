@@ -7,8 +7,12 @@ Only combinations actually exercised are marked verified.
 | Windows 10 Pro 22H2, build 19045 | PowerPoint 16.0, build 14332 | Native USB HID + SoftAP web API | Pass | Full command and 200-switch run on 2026-07-18 |
 | Windows 11 | Microsoft PowerPoint | Native USB HID | Not tested | No claim |
 | Any | Google Slides | Browser | Not tested | Default profile supplied, application validation pending |
-| Any | LibreOffice Impress | Native USB HID | Not tested | Default profile supplied, application validation pending |
+| Any | LibreOffice Impress | Native USB HID | Not tested | LibreOffice was not installed on the Windows 10 validation host; default profile supplied |
 | Any | PDF viewer | Native USB HID | Not tested | Viewer shortcuts vary |
+
+The phone session shown in the README GIF confirms the responsive web UI in a
+real mobile browser. Its exact phone OS and browser builds were not recorded,
+so it is deliberately not listed as a verified environment above.
 
 ## Development-board validation
 

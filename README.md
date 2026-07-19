@@ -1,10 +1,16 @@
 # SlideLink — ESP32-S3 Remote Presenter
 
+<p align="center">
+  <img src="docs/assets/slidelink-demo.gif" width="360" alt="SlideLink web remote controlling a presentation from a phone">
+</p>
+
 SlideLink is an autonomous presentation remote for ESP32-S3. The board appears
 to the computer as a driverless USB HID keyboard and hosts a private Wi-Fi web
 interface that works without a router or Internet connection.
 
 Current milestone: **v0.2.0 — Autonomous Web Remote**.
+
+Stable release: [v0.1.0 — USB HID Presenter Core](https://github.com/maggogerka/esp32-s3-remote-presenter/releases/tag/v0.1.0).
 
 ## Features
 
@@ -72,6 +78,22 @@ The component manager uses the dependency graph in `dependencies.lock`.
 The v0.2.0 application binary is about 902 KiB. The firmware version comes
 from ESP-IDF project metadata (`version.txt`) in the boot log, UART status and
 system API.
+
+## Verified environments
+
+Only combinations that were exercised end to end are marked as verified:
+
+| Host | Application | Result |
+|---|---|---|
+| Windows 10 Pro 22H2, build 19045 | Microsoft PowerPoint 16.0, build 14332 | Pass: every presenter command, 200 slide switches, USB reconnect/reset and sleep/resume |
+| Windows 11 | Microsoft PowerPoint | Not tested |
+| Any | LibreOffice Impress | Not tested; LibreOffice was not installed on the validation host |
+| Any | Google Slides | Not tested; the default profile is supplied but has not been application-validated |
+| Any | PDF viewer | Not tested; shortcuts vary by viewer |
+
+The firmware itself was built with ESP-IDF 6.0.2 and tested on an ESP32-S3
+QFN56 revision 0.2 board. See [docs/compatibility.md](docs/compatibility.md) for
+the board, USB identity, test date and full hardware results.
 
 ## Web remote and profiles
 
@@ -157,7 +179,7 @@ HID reports. It sends no HID input at boot and persists no command queue.
 
 - v0.1.0: USB HID core
 - v0.2.0: Autonomous Wi-Fi web remote and persistent profiles
-- v0.3.0: Dedicated remote hardware and richer device management
+- v0.3.0: Autonomous web-remote hardening, OTA updates and configuration backup
 - v0.4.0: Optional companion integrations
 
 Licensed under the [MIT License](LICENSE).
