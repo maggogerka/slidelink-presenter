@@ -8,9 +8,7 @@ SlideLink is an autonomous presentation remote for ESP32-S3. The board appears
 to the computer as a driverless USB HID keyboard and hosts a private Wi-Fi web
 interface that works without a router or Internet connection.
 
-Current milestone: **v0.2.0 — Autonomous Web Remote**.
-
-Stable release: [v0.1.0 — USB HID Presenter Core](https://github.com/maggogerka/esp32-s3-remote-presenter/releases/tag/v0.1.0).
+Current stable release: [**v0.2.0 — Autonomous Web Remote**](https://github.com/maggogerka/esp32-s3-remote-presenter/releases/tag/v0.2.0).
 
 ## Features
 
