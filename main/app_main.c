@@ -7,6 +7,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "firmware_update.h"
 #include "nvs_flash.h"
 #include "presenter.h"
 #include "presenter_button.h"
@@ -14,6 +15,7 @@
 #include "profile_store.h"
 #include "session_manager.h"
 #include "usb_hid.h"
+#include "usb_network.h"
 #include "web_server.h"
 #include "wifi_manager.h"
 
@@ -41,6 +43,7 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(err);
     ESP_ERROR_CHECK(session_manager_init());
+    ESP_ERROR_CHECK(firmware_update_init());
     ESP_ERROR_CHECK(profile_store_init());
     presenter_profile_t active_profile;
     ESP_ERROR_CHECK(profile_store_get_active(&active_profile));
@@ -51,7 +54,9 @@ void app_main(void)
     ESP_ERROR_CHECK(presenter_button_init());
     ESP_ERROR_CHECK(presenter_console_init());
     ESP_ERROR_CHECK(wifi_manager_init());
+    ESP_ERROR_CHECK(usb_network_init());
     ESP_ERROR_CHECK(web_server_init());
+    ESP_ERROR_CHECK(firmware_update_confirm_running());
 
     ESP_LOGI(TAG, "ready; connect the native USB port and type 'help' on UART");
 }

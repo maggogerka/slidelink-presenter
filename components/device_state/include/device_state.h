@@ -12,8 +12,15 @@ typedef struct {
     bool usb_ready;
     bool usb_suspended;
     uint32_t usb_session;
+    bool usb_network_initialized;
+    bool usb_network_link_up;
+    char usb_network_ip[16];
+    uint32_t usb_network_received_packets;
+    uint32_t usb_network_transmitted_packets;
+    uint32_t usb_network_dropped_packets;
     char device_name[24];
     char wifi_ip[16];
+    char wifi_ssid[33];
     uint8_t wifi_clients;
     bool setup_mode;
     uint32_t active_profile_id;

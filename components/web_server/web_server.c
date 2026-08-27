@@ -12,9 +12,12 @@
 #include "command_router.h"
 #include "device_state.h"
 #include "esp_app_desc.h"
+#include "esp_efuse.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_secure_boot.h"
 #include "esp_system.h"
+#include "firmware_update.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "presenter.h"
@@ -23,11 +26,14 @@
 
 #define JSON_BODY_MAX 4096U
 #define WS_BODY_MAX 512U
+#define FIRMWARE_CHUNK_SIZE 4096U
 
 extern const uint8_t index_html_start[] asm("_binary_index_html_start");
 extern const uint8_t index_html_end[] asm("_binary_index_html_end");
 extern const uint8_t styles_css_start[] asm("_binary_styles_css_start");
 extern const uint8_t styles_css_end[] asm("_binary_styles_css_end");
+extern const uint8_t layout_css_start[] asm("_binary_layout_css_start");
+extern const uint8_t layout_css_end[] asm("_binary_layout_css_end");
 extern const uint8_t app_js_start[] asm("_binary_app_js_start");
 extern const uint8_t app_js_end[] asm("_binary_app_js_end");
 extern const uint8_t manifest_json_start[] asm("_binary_manifest_json_start");
@@ -153,6 +159,16 @@ static esp_err_t system_handler(httpd_req_t *request)
     cJSON_AddBoolToObject(usb, "ready", state.usb_ready);
     cJSON_AddBoolToObject(usb, "suspended", state.usb_suspended);
     cJSON_AddNumberToObject(usb, "session", state.usb_session);
+    cJSON *network = cJSON_AddObjectToObject(usb, "network");
+    cJSON_AddBoolToObject(network, "initialized", state.usb_network_initialized);
+    cJSON_AddBoolToObject(network, "link_up", state.usb_network_link_up);
+    cJSON_AddStringToObject(network, "ip", state.usb_network_ip);
+    cJSON_AddNumberToObject(network, "received_packets",
+                            state.usb_network_received_packets);
+    cJSON_AddNumberToObject(network, "transmitted_packets",
+                            state.usb_network_transmitted_packets);
+    cJSON_AddNumberToObject(network, "dropped_packets",
+                            state.usb_network_dropped_packets);
     cJSON *wifi = cJSON_AddObjectToObject(root, "wifi");
     cJSON_AddNumberToObject(wifi, "clients", state.wifi_clients);
     cJSON_AddStringToObject(wifi, "ip", state.wifi_ip);
@@ -163,6 +179,12 @@ static esp_err_t system_handler(httpd_req_t *request)
     cJSON_AddStringToObject(presenter, "active_profile_name",
                             state.active_profile_name);
     cJSON_AddNumberToObject(presenter, "queue_depth", state.queue_depth);
+    cJSON *security = cJSON_AddObjectToObject(root, "security");
+    cJSON_AddBoolToObject(security, "secure_boot", esp_secure_boot_enabled());
+    cJSON_AddBoolToObject(security, "flash_encryption",
+                          esp_efuse_is_flash_encryption_enabled());
+    cJSON_AddBoolToObject(root, "firmware_update_in_progress",
+                          firmware_update_in_progress());
     return send_json(request, "200 OK", root);
 }
 
@@ -230,6 +252,139 @@ static esp_err_t session_handler(httpd_req_t *request)
     cJSON_AddStringToObject(root, "token", token);
     cJSON_AddNumberToObject(root, "expires_in_seconds", 1800);
     return send_json(request, "200 OK", root);
+}
+
+static esp_err_t setup_credential_handler(httpd_req_t *request)
+{
+    if (session_manager_is_configured()) {
+        return send_error(request, "404 Not Found", "not_found",
+                          "Setup credential is unavailable after provisioning");
+    }
+    char credential[SETUP_CREDENTIAL_LENGTH] = {0};
+    if (session_manager_get_setup_credential(credential) != ESP_OK) {
+        return send_error(request, "500 Internal Server Error", "storage_error",
+                          "Setup credential could not be loaded");
+    }
+    device_state_snapshot_t state;
+    device_state_get(&state);
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "device", state.device_name);
+    cJSON_AddStringToObject(root, "ssid", state.wifi_ssid);
+    cJSON_AddStringToObject(root, "credential", credential);
+    cJSON_AddStringToObject(root, "usb_url", "http://192.168.55.1");
+    return send_json(request, "200 OK", root);
+}
+
+static esp_err_t settings_put_handler(httpd_req_t *request)
+{
+    if (!require_authorized(request)) return ESP_OK;
+    cJSON *json = receive_json(request, 256);
+    static const char *const allowed[] = {"current_pin", "wifi_password", "new_pin"};
+    if (json == NULL || !object_has_only(json, allowed, 3)) {
+        cJSON_Delete(json);
+        return send_error(request, "400 Bad Request", "invalid_json",
+                          "Unknown or malformed settings fields");
+    }
+    const cJSON *current = cJSON_GetObjectItemCaseSensitive(json, "current_pin");
+    const cJSON *wifi = cJSON_GetObjectItemCaseSensitive(json, "wifi_password");
+    const cJSON *new_pin = cJSON_GetObjectItemCaseSensitive(json, "new_pin");
+    const bool valid = cJSON_IsString(current) &&
+        (wifi == NULL || cJSON_IsString(wifi)) &&
+        (new_pin == NULL || cJSON_IsString(new_pin)) &&
+        (wifi != NULL || new_pin != NULL);
+    esp_err_t err = valid ? session_manager_update_credentials(
+        current->valuestring, wifi == NULL ? NULL : wifi->valuestring,
+        new_pin == NULL ? NULL : new_pin->valuestring) : ESP_ERR_INVALID_ARG;
+    cJSON_Delete(json);
+    if (err == ESP_ERR_TIMEOUT) return send_error(request, "429 Too Many Requests",
+        "login_throttled", "Too many failed attempts; wait 30 seconds");
+    if (err == ESP_ERR_INVALID_CRC) return send_error(request, "403 Forbidden",
+        "invalid_pin", "The current PIN is incorrect");
+    if (err != ESP_OK) return send_error(request, "422 Unprocessable Entity",
+        "invalid_settings", "Use a Wi-Fi password of 8-63 characters and PIN of 4-8 digits");
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "restart_required", true);
+    esp_err_t response = send_json(request, "200 OK", root);
+    (void)xTaskCreate(delayed_restart, "settings_restart", 2048, NULL, 3, NULL);
+    return response;
+}
+
+static esp_err_t factory_reset_handler(httpd_req_t *request)
+{
+    if (!require_authorized(request)) return ESP_OK;
+    cJSON *json = receive_json(request, 64);
+    static const char *const allowed[] = {"pin"};
+    const cJSON *pin = json == NULL ? NULL :
+        cJSON_GetObjectItemCaseSensitive(json, "pin");
+    const bool valid = json != NULL && object_has_only(json, allowed, 1) &&
+        cJSON_IsString(pin);
+    const esp_err_t authorized = valid ?
+        session_manager_reauthorize_pin(pin->valuestring) : ESP_ERR_INVALID_ARG;
+    cJSON_Delete(json);
+    if (authorized != ESP_OK) return send_error(request, "403 Forbidden",
+        "invalid_pin", "Factory reset requires the current PIN");
+
+    esp_err_t err = command_router_begin_profile_update();
+    const bool locked = err == ESP_OK;
+    if (locked) err = profile_store_factory_reset();
+    if (err == ESP_OK) err = session_manager_factory_reset();
+    if (locked) command_router_end_profile_update();
+    if (err != ESP_OK) return send_error(request, "500 Internal Server Error",
+        "storage_error", "Factory reset could not be completed");
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "restart_required", true);
+    esp_err_t response = send_json(request, "200 OK", root);
+    (void)xTaskCreate(delayed_restart, "factory_restart", 2048, NULL, 3, NULL);
+    return response;
+}
+
+static esp_err_t firmware_handler(httpd_req_t *request)
+{
+    if (!require_authorized(request)) return ESP_OK;
+    char content_type[48] = {0};
+    if (request->content_len <= 0 ||
+        httpd_req_get_hdr_value_str(request, "Content-Type", content_type,
+                                    sizeof(content_type)) != ESP_OK ||
+        strncmp(content_type, "application/octet-stream", 24) != 0) {
+        return send_error(request, "400 Bad Request", "invalid_firmware",
+                          "Expected a non-empty application/octet-stream image");
+    }
+    esp_err_t err = firmware_update_begin((size_t)request->content_len);
+    if (err != ESP_OK) return send_error(request,
+        err == ESP_ERR_INVALID_STATE ? "409 Conflict" : "413 Payload Too Large",
+        "update_unavailable", "The image does not fit or an update is already active");
+    uint8_t *buffer = malloc(FIRMWARE_CHUNK_SIZE);
+    if (buffer == NULL) {
+        firmware_update_abort();
+        return send_error(request, "503 Service Unavailable", "out_of_memory",
+                          "There is not enough memory to receive the update");
+    }
+    size_t received = 0U;
+    unsigned timeouts = 0U;
+    while (received < (size_t)request->content_len) {
+        const size_t remaining = (size_t)request->content_len - received;
+        const int count = httpd_req_recv(request, (char *)buffer,
+                                         remaining < FIRMWARE_CHUNK_SIZE ?
+                                         remaining : FIRMWARE_CHUNK_SIZE);
+        if (count == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts <= 3U) continue;
+        if (count <= 0) { err = ESP_FAIL; break; }
+        timeouts = 0U;
+        err = firmware_update_write(buffer, (size_t)count);
+        if (err != ESP_OK) break;
+        received += (size_t)count;
+    }
+    char version[32] = {0};
+    if (err == ESP_OK) err = firmware_update_finish(version, sizeof(version));
+    else firmware_update_abort();
+    free(buffer);
+    if (err != ESP_OK) return send_error(request, "422 Unprocessable Entity",
+        "invalid_firmware", "The firmware image is incomplete, corrupt, or for another product");
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "version", version);
+    cJSON_AddBoolToObject(root, "restart_required", true);
+    esp_err_t response = send_json(request, "200 OK", root);
+    (void)xTaskCreate(delayed_restart, "update_restart", 2048, NULL, 3, NULL);
+    return response;
 }
 
 static bool parse_action(const char *action, presenter_command_type_t *type)
@@ -667,23 +822,29 @@ esp_err_t web_server_init(void)
     if (s_server != NULL) return ESP_ERR_INVALID_STATE;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 16;
+    config.max_uri_handlers = 20;
     config.stack_size = 8192;
     esp_err_t err = httpd_start(&s_server, &config);
     if (err != ESP_OK) return err;
     static const static_asset_t index_asset = {index_html_start, index_html_end, "text/html"};
     static const static_asset_t css_asset = {styles_css_start, styles_css_end, "text/css"};
+    static const static_asset_t layout_asset = {layout_css_start, layout_css_end, "text/css"};
     static const static_asset_t js_asset = {app_js_start, app_js_end, "application/javascript"};
     static const static_asset_t manifest_asset = {manifest_json_start, manifest_json_end,
                                                    "application/manifest+json"};
     const httpd_uri_t handlers[] = {
         {.uri="/", .method=HTTP_GET, .handler=static_handler, .user_ctx=(void *)&index_asset},
         {.uri="/styles.css", .method=HTTP_GET, .handler=static_handler, .user_ctx=(void *)&css_asset},
+        {.uri="/layout.css", .method=HTTP_GET, .handler=static_handler, .user_ctx=(void *)&layout_asset},
         {.uri="/app.js", .method=HTTP_GET, .handler=static_handler, .user_ctx=(void *)&js_asset},
         {.uri="/manifest.json", .method=HTTP_GET, .handler=static_handler, .user_ctx=(void *)&manifest_asset},
         {.uri="/api/v1/system", .method=HTTP_GET, .handler=system_handler},
         {.uri="/api/v1/setup", .method=HTTP_POST, .handler=setup_handler},
+        {.uri="/api/v1/setup-credential", .method=HTTP_GET, .handler=setup_credential_handler},
         {.uri="/api/v1/session", .method=HTTP_POST, .handler=session_handler},
+        {.uri="/api/v1/settings", .method=HTTP_PUT, .handler=settings_put_handler},
+        {.uri="/api/v1/factory-reset", .method=HTTP_POST, .handler=factory_reset_handler},
+        {.uri="/api/v1/firmware", .method=HTTP_POST, .handler=firmware_handler},
         {.uri="/api/v1/commands", .method=HTTP_POST, .handler=commands_handler},
         {.uri="/api/v1/profiles", .method=HTTP_GET, .handler=profiles_get_handler},
         {.uri="/api/v1/profiles/*", .method=HTTP_PUT, .handler=profile_put_handler},

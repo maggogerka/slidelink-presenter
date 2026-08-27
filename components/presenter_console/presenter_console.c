@@ -19,6 +19,15 @@
 #include "sdkconfig.h"
 #include "usb_hid.h"
 
+#if CONFIG_ESP_CONSOLE_NONE
+
+esp_err_t presenter_console_init(void)
+{
+    return ESP_OK;
+}
+
+#else
+
 static const char *TAG = "CONSOLE";
 
 static const char *firmware_version(void)
@@ -183,3 +192,5 @@ esp_err_t presenter_console_init(void)
              CONFIG_ESP_CONSOLE_UART_BAUDRATE);
     return ESP_OK;
 }
+
+#endif

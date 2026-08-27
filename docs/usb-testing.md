@@ -1,80 +1,81 @@
-# USB and PowerPoint test plan
+# Windows 11 release validation
 
-Use two data-capable cables: USB-UART for logs and native USB/OTG for HID.
-Keep a plain text editor closed while testing presentation commands so focus
-cannot accidentally make an expected key visible elsewhere.
+Use a sacrificial DEV-secured board first. Keep USB-UART monitoring on COM3 and
+connect the native USB/OTG port separately when the board exposes two ports.
+Do not mark a row in `compatibility.md` Pass without performing it.
 
-## Enumeration
+## 1. Enumeration and route isolation
 
-1. Flash production firmware over USB-UART.
-2. Keep `idf.py -p COM10 monitor` open.
-3. Connect native USB to Windows 10.
-4. Confirm `USB_HID: mounted session=...` in the UART log.
-5. In Device Manager, confirm a HID Keyboard Device whose properties show
-   `VID_303A&PID_4004` and product `SlideLink USB Presenter`.
-6. Run `status`; expect `usb: mounted` and normally `hid: ready`.
-7. Reset the board while PowerPoint is focused; verify no slide changes.
+```powershell
+Get-PnpDevice -PresentOnly | Where-Object InstanceId -Match 'VID_303A&PID_4005'
+Get-NetAdapter | Sort-Object InterfaceDescription | Format-Table Name,InterfaceDescription,Status
+Get-NetIPConfiguration | Format-List InterfaceAlias,IPv4Address,IPv4DefaultGateway,DNSServer
+route print -4
+curl.exe --noproxy "*" http://192.168.55.1/api/v1/system
+```
 
-## PowerPoint commands
+Pass criteria:
 
-Open a presentation containing at least 12 slides.
+- one composite parent yields a working HID keyboard and NCM network adapter;
+- the NCM host receives `192.168.55.x/24`;
+- NCM has no default gateway and no DNS server;
+- the existing default route and Internet remain on the user's normal adapter;
+- `192.168.55.1` opens repeatedly in Chrome and Edge;
+- native USB disconnect/reconnect restores both functions without reboot.
 
-| # | Input | Expected result |
-|---:|---|---|
-| 1 | `next` | Next slide |
-| 2 | `previous` | Previous slide |
-| 3 | `start` | Slideshow starts at slide 1 |
-| 4 | `start-current` | Slideshow starts at selected slide |
-| 5 | `stop` | Slideshow closes |
-| 6 | `black` twice | Black screen toggles on and off |
-| 7 | `white` twice | White screen toggles on and off |
-| 8 | `first` | First slide |
-| 9 | `last` | Last slide |
-| 10 | `goto 12` | Slide 12 opens |
-| 11 | Short BOOT press | Next slide, once |
-| 12 | BOOT press >= 1 s | Previous slide, once |
+Also try `slidelink.local`; failure of `.local` is acceptable only if the
+documented numeric fallback remains reliable.
 
-## Robustness
+## 2. Presentation applications
 
-1. Send 200 alternating `next`/`previous` commands. Some may be explicitly
-   rejected when the queue is full; the firmware must not hang or leave a key
-   held.
-2. Fill all eight pending-command slots, then disconnect native USB while the
-   queue is non-empty. Reconnect it and verify no old command is replayed.
-3. Suspend and resume Windows; verify new commands work after resume.
-4. Try `goto 0`, `goto -5`, `goto 10000`, `goto abc`, an unknown command and a
-   65-character line. Verify each is rejected and no slide changes.
-5. Reset the board at least five times with PowerPoint focused. Verify no
-   spontaneous slide movement.
+Use a 12+ slide deck and verify each action by observing the application, not
+only an API acceptance response:
 
-Record the Windows version, PowerPoint version, board model and cable/port used
-in `docs/compatibility.md` when a full pass is completed.
+1. Next and Previous.
+2. Start from first and start from current.
+3. End presentation.
+4. Black screen twice and white screen twice.
+5. First, Last, and Go to slide 12.
+6. Short and >=1 s physical button actions.
 
-## Recorded run: 2026-07-18
+Repeat for Microsoft 365 PowerPoint, Google Slides in Chrome and Edge,
+LibreOffice Impress when installed, and Chrome/Edge PDF presentation modes.
 
-The automated hardware-assisted run on Windows 10 Pro build 19045 and
-PowerPoint 16.0 build 14332 passed every command above, 200 alternating
-Next/Previous commands, five board resets and a reset while commands were
-queued. Device Manager reported a started HID keyboard at
-`HID\\VID_303A&PID_4004`. No stale command replay or spontaneous slide movement
-was observed.
+## 3. Stability
 
-The physical follow-up filled the queue to depth eight, then removed native USB.
-The firmware observed session 1→2 on detach, cleared the queue, remounted as
-session 3 and kept the queue empty without stale replay. Windows then entered
-sleep for about 23 seconds (Kernel-Power event 42 and Power-Troubleshooter event
-1). After resume, HID was mounted, ready and not suspended; a new command moved
-PowerPoint from slide 1 to slide 2. The full v0.1.0 checklist is complete.
+- 500+ alternating Next/Previous executions with final slide position checked
+- rapid physical/web commands together; bounded rejections are acceptable,
+  hangs and stuck keys are not
+- fill the eight-item queue and remove native USB; no old command may replay
+- ten native USB unplug/replug cycles
+- five board resets with presentation focus; no spontaneous key
+- Windows sleep/resume followed by immediate HID and web commands
+- WebSocket/network disconnect/reconnect during commands
+- Wi-Fi SoftAP disconnect/reconnect and two-client limit
+- boot with no network client for 30 minutes
+- corrupt test NVS, verify safe defaults; then factory reset and re-provision
+- credential/profile persistence across at least five resets
 
-## v0.2.0 web-path checks
+Collect UART reset reasons, minimum heap, NCM dropped-packet counter, and any
+watchdog output. A reset, watchdog, permanent wait, or stuck key is a failure.
 
-1. Connect to the autonomous SoftAP and load all four embedded assets.
-2. Complete setup, authenticate and verify that unauthenticated protected calls
-   are rejected.
-3. Read six profiles; edit, test, save and activate Custom 1.
-4. Reset the board and verify the edited profile and active ID persisted.
-5. Restore the factory profile and PowerPoint as active.
-6. Confirm command acceptance and final result messages use the same request ID.
+## 4. OTA and rollback
 
-These checks passed on the same board. Minimum free heap observed during the
-web/API run was 240,148 bytes.
+1. Upload the current valid app and verify the alternate slot boots.
+2. Verify settings and profiles persist.
+3. Reject a truncated image, random file, wrong project image, and (production)
+   unsigned image.
+4. On a sacrificial board, force a new image to fail before app confirmation
+   and verify bootloader rollback.
+5. Interrupt upload at multiple offsets; the previous slot must still boot.
+
+## 5. Browser/mobile UI
+
+For Chrome, Edge, Android Chrome, and iPhone Safari:
+
+- first-run setup, login/throttle, and session expiry
+- manual RU/EN switching and persistence after reload
+- every presenter control, timer, slide number constraints
+- profile edit/test/save/reset/activate
+- credential change, device details, update error reporting, factory reset
+- portrait/landscape and narrow viewport without clipped critical controls

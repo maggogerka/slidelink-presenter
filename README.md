@@ -1,183 +1,115 @@
-# SlideLink — ESP32-S3 Remote Presenter
+# SlideLink Product v1
 
-<p align="center">
-  <img src="docs/assets/slidelink-demo.gif" width="360" alt="SlideLink web remote controlling a presentation from a phone">
-</p>
+SlideLink turns an ESP32-S3 into a driverless presentation controller. One
+native USB cable exposes a composite device to Windows 11:
 
-SlideLink is an autonomous presentation remote for ESP32-S3. The board appears
-to the computer as a driverless USB HID keyboard and hosts a private Wi-Fi web
-interface that works without a router or Internet connection.
+- USB HID keyboard for presentation commands;
+- USB NCM network adapter for the embedded web interface;
+- isolated address `http://192.168.55.1` with no advertised gateway or DNS;
+- `http://slidelink.local` through mDNS when the host resolves it.
 
-Current stable release: [**v0.2.0 — Autonomous Web Remote**](https://github.com/maggogerka/esp32-s3-remote-presenter/releases/tag/v0.2.0).
+The same HTTP/API backend remains available through the WPA2 SoftAP fallback at
+`192.168.4.1`. No desktop companion, cloud service, CDN, or Internet connection
+is required.
 
-## Features
+## Product v1 features
 
-- Native ESP32-S3 USB HID keyboard with no host-side application or driver
-- WPA2 SoftAP at `192.168.4.1` and `http://slidelink.local`
-- Responsive offline web remote embedded in the firmware
-- HTTP command API and WebSocket command-result notifications
-- Six editable profiles: PowerPoint, Google Slides, LibreOffice Impress,
-  Generic PDF and two custom profiles
-- Strict key and modifier allowlist; arbitrary keyboard input is impossible
-- Profiles and active-profile selection persisted in NVS with schema and CRC32
-- First-run Wi-Fi password and 4–8 digit PIN provisioning
-- Salted PIN hash, random RAM-only session tokens, sliding expiry and login
-  throttling
-- BOOT button: short press for next, at least one second for previous, and at
-  least eight seconds for a physical factory reset
-- Bounded HID waits, an eight-item queue, release reports and stale-command
-  protection across USB disconnects and resets
+- Next, Previous, start from first/current, end, black/white screen, first/last,
+  and direct slide number
+- responsive mobile-first web remote and elapsed timer
+- one RU/EN HTML application; automatic language choice plus persistent
+  `RU | EN` switch
+- six persistent, editable, strictly allowlisted presentation profiles
+- bounded command queue, USB-session invalidation, explicit key release, and
+  WebSocket execution results
+- BOOT on the development board: short = Next, hold 1 s = Previous, hold 8 s =
+  factory reset
+- configurable separate Next/Previous GPIO inputs for a production PCB
+- unique per-device first-run Wi-Fi credential; no shared setup password
+- PBKDF2-HMAC-SHA-256 PIN storage, rate-limited login, random RAM-only sessions
+- authenticated local firmware update, two 3 MiB OTA slots, image/product
+  validation, and boot rollback
+- separate DEV and PRODUCTION security configurations
 
-## Hardware connection
+## Hardware
 
-The two USB roles are deliberately separate:
+The firmware requires an ESP32-S3 with the native USB D-/D+ signals exposed
+(GPIO19/GPIO20) and 16 MiB flash for the supplied partition table. The board
+currently connected during v1 development reports ESP32-S3 QFN56 rev 0.2,
+16 MiB flash, and 8 MiB PSRAM.
+
+Many development boards have two connectors:
 
 ```text
-ESP32-S3 USB-UART connector (CH343/CP210x) --> flashing + 115200-baud console
-ESP32-S3 native USB/OTG connector            --> Windows HID keyboard
-                                                   GPIO19 = D-
-                                                   GPIO20 = D+
+USB-UART bridge connector -> flashing, COM port, 115200-baud DEV logs
+Native USB / OTG connector -> HID keyboard + NCM web interface
 ```
 
-Use the connector labelled `USB`, `OTG`, or `Native USB` for HID. A connector
-that appears as CH343/CP210x is only the UART bridge. Both cables may remain
-connected.
+RST/EN is a hardware reset input and is never treated as a GPIO button. GPIO0
+BOOT is used only by the development input configuration.
 
-## First run
+## Quick start on Windows 11
 
-1. Flash the firmware and wait for the setup access point named
-   `SlideLink-XXXX-Setup`.
-2. Connect with the initial password `slidelink-setup`.
-3. Open `http://192.168.4.1` and choose a new WPA2 password plus a 4–8 digit
-   control PIN.
-4. After the automatic restart, reconnect to `SlideLink-XXXX` using the new
-   password and open `http://192.168.4.1` or `http://slidelink.local`.
-5. Enter the PIN, select a profile, and use the remote.
-
-The ESP32-S3 does not provide Internet access. A phone may show “no Internet”;
-stay connected to the SlideLink network. The web interface is HTTP inside the
-device's isolated WPA2 network, not HTTPS.
-
-Hold BOOT for at least eight seconds to erase the Wi-Fi password, PIN and all
-profile changes. The board then restarts in setup mode.
-
-## Build and flash
-
-Prerequisites: ESP-IDF 6.0.2 and an ESP32-S3 board with native USB exposed.
+Prerequisite: ESP-IDF 6.0.2. In PowerShell from this repository:
 
 ```powershell
-idf.py --version
-idf.py set-target esp32s3
-idf.py build
-idf.py -p COM10 flash monitor
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\flash-dev.ps1 -Port COM3
 ```
 
-The component manager uses the dependency graph in `dependencies.lock`.
-The v0.2.0 application binary is about 902 KiB. The firmware version comes
-from ESP-IDF project metadata (`version.txt`) in the boot log, UART status and
-system API.
+Connect the native USB port, wait for Windows to enumerate the composite
+device, then open `http://192.168.55.1`. On first run, choose a private Wi-Fi
+password and 4-8 digit PIN. The USB path does not require joining the SoftAP.
 
-## Verified environments
-
-Only combinations that were exercised end to end are marked as verified:
-
-| Host | Application | Result |
-|---|---|---|
-| Windows 10 Pro 22H2, build 19045 | Microsoft PowerPoint 16.0, build 14332 | Pass: every presenter command, 200 slide switches, USB reconnect/reset and sleep/resume |
-| Windows 11 | Microsoft PowerPoint | Not tested |
-| Any | LibreOffice Impress | Not tested; LibreOffice was not installed on the validation host |
-| Any | Google Slides | Not tested; the default profile is supplied but has not been application-validated |
-| Any | PDF viewer | Not tested; shortcuts vary by viewer |
-
-The firmware itself was built with ESP-IDF 6.0.2 and tested on an ESP32-S3
-QFN56 revision 0.2 board. See [docs/compatibility.md](docs/compatibility.md) for
-the board, USB identity, test date and full hardware results.
-
-## Web remote and profiles
-
-The main screen provides large Previous and Next controls, slideshow actions,
-direct slide navigation, an elapsed timer, USB/Wi-Fi status and live execution
-results. The profile editor supports up to four allowlisted key steps per
-binding, Shift/Ctrl/Alt modifiers and bounded delays. A binding can be tested
-without saving it.
-
-![SlideLink autonomous web remote connected to PowerPoint](docs/assets/slidelink-web-remote.png)
-
-*SlideLink v0.2.0 running locally at `192.168.4.1`, with USB HID ready and the
-PowerPoint profile active.*
-
-Profile updates pause command intake, clear queued work, release all keys and
-then atomically publish the new profile revision. A queued command from an old
-profile revision is never replayed against the new mapping.
-
-See [docs/web-api.md](docs/web-api.md) and
-[docs/security.md](docs/security.md) for protocol and trust-boundary details.
-
-## UART console
-
-The 115200-baud console remains available for diagnostics and local control.
-Commands are case-insensitive, empty lines are ignored, and input is limited to
-64 characters.
-
-| Command | Default PowerPoint action |
-|---|---|
-| `next` / `previous` | Next / previous slide |
-| `start` / `start-current` | Start from first / current slide |
-| `stop` | End slideshow |
-| `black` / `white` | Toggle black / white screen |
-| `first` / `last` | First / last slide |
-| `goto 12` | Go to slide 12 |
-| `status` / `help` | Diagnostics / command list |
-
-`goto` accepts only decimal slide numbers from 1 through 9999. Unsupported
-input is never interpreted as raw text or HID keycodes. Commands submitted
-while native USB is unavailable are rejected and are not replayed later.
-
-## Tests
-
-The dedicated test application replaces USB with a safe test double:
+For Wi-Fi-only first setup, use the unique credential printed in the DEV UART
+log or placed on the product label. The SSID is `SlideLink-XXXX-Setup`. To
+capture a printable production label over USB:
 
 ```powershell
-idf.py -C tests -B build-tests set-target esp32s3
-idf.py -C tests -B build-tests build
-idf.py -C tests -B build-tests -p COM10 flash monitor
+python -m pip install "qrcode[pil]"
+python .\tools\make_setup_label.py --require-qr
 ```
 
-GitHub Actions compiles both production and test firmware. CI has no attached
-ESP32-S3, so it does **not** execute the Unity suite. Execution is recorded only
-from a manual hardware run. The 2026-07-18 COM10 run passed all 11 tests, and
-production firmware was restored afterward.
+See [User quick start](docs/user-quick-start.md) for the full user flow.
 
-The Windows/PowerPoint hardware procedure and exact results are in
-[docs/usb-testing.md](docs/usb-testing.md) and
-[docs/compatibility.md](docs/compatibility.md).
+## Build, test, and release
 
-## USB identity and safety
+```powershell
+# Development firmware
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build.ps1 -Configuration dev
 
-- Manufacturer: `Maggogerka`
-- Product: `SlideLink USB Presenter`
-- Device class: HID keyboard
-- Development VID:PID: Espressif default `303A:4004`
+# Compile the device-side Unity suite
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& { . 'C:\Espressif\tools\Microsoft.v6.0.2.PowerShell_profile.ps1'; idf.py -C tests -B build-tests set-target esp32s3; idf.py -C tests -B build-tests build }"
 
-The Espressif VID/PID is appropriate only for this non-commercial prototype.
-A commercially distributed product needs an assigned USB VID/PID.
+# Dependency-free UI/i18n release checks
+python .\tools\validate_frontend.py
 
-SlideLink accepts no arbitrary text, scripts, operating-system commands or raw
-HID reports. It sends no HID input at boot and persists no command queue.
+# Production build only (requires an offline-managed signing key)
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build.ps1 -Configuration production
+```
+
+Never flash `build-product` with the ordinary DEV command. A production
+bootloader can permanently enable Secure Boot, Flash Encryption, secure ROM
+download mode, and JTAG lockdown on first boot. Follow
+[Production provisioning](docs/production-provisioning.md); its script defaults
+to audit/build only and requires two exact manual confirmations before reset.
+
+## USB identity
+
+DEV defaults use Espressif VID `303A` and SlideLink PID `4005`, with a
+chip-derived serial number. This identity is for development only. A shipping
+product must configure a manufacturer-assigned or sublicensed VID/PID through
+`CONFIG_SLIDELINK_USB_VID` and `CONFIG_SLIDELINK_USB_PID`.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Build and flash](docs/build-flash.md)
+- [User quick start](docs/user-quick-start.md)
 - [Web API](docs/web-api.md)
 - [Security model](docs/security.md)
-- [USB and PowerPoint test plan](docs/usb-testing.md)
+- [Production provisioning](docs/production-provisioning.md)
+- [Windows 11 validation plan](docs/usb-testing.md)
 - [Compatibility matrix](docs/compatibility.md)
-
-## Roadmap
-
-- v0.1.0: USB HID core
-- v0.2.0: Autonomous Wi-Fi web remote and persistent profiles
-- v0.3.0: Autonomous web-remote hardening, OTA updates and configuration backup
-- v0.4.0: Optional companion integrations
 
 Licensed under the [MIT License](LICENSE).

@@ -3,76 +3,107 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#090c12">
+  <meta name="theme-color" content="#081018">
   <title>SlideLink</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/layout.css">
 </head>
 <body>
+  <div class="language-switch" aria-label="Language">
+    <button type="button" data-lang="ru">RU</button><span>|</span><button type="button" data-lang="en">EN</button>
+  </div>
   <main class="shell">
     <section id="setupView" class="gate hidden">
       <div class="brand-mark">SL</div>
-      <p class="eyebrow">FIRST-RUN SETUP</p>
-      <h1>Secure your SlideLink</h1>
-      <p class="muted">Choose a private Wi-Fi password and a control PIN. The device restarts once.</p>
+      <p class="eyebrow" data-i18n="setup.eyebrow"></p>
+      <h1 data-i18n="setup.title"></h1>
+      <p class="muted" data-i18n="setup.description"></p>
       <form id="setupForm">
-        <label>New Wi-Fi password<input id="wifiPassword" type="password" minlength="8" maxlength="63" required autocomplete="new-password"></label>
-        <label>Control PIN<input id="setupPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="new-password"></label>
-        <button class="primary" type="submit">Save and restart</button>
+        <label><span data-i18n="setup.wifi"></span><input id="wifiPassword" type="password" minlength="8" maxlength="63" required autocomplete="new-password"></label>
+        <label><span data-i18n="common.pin"></span><input id="setupPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="new-password"></label>
+        <button class="primary" type="submit" data-i18n="setup.save"></button>
       </form>
     </section>
 
     <section id="loginView" class="gate">
       <div class="brand-mark">SL</div>
-      <p class="eyebrow">LOCAL PRESENTER</p>
+      <p class="eyebrow" data-i18n="login.eyebrow"></p>
       <h1>SlideLink</h1>
-      <p class="muted">Enter the control PIN. It never leaves this local Wi-Fi network.</p>
+      <p class="muted" data-i18n="login.description"></p>
       <form id="loginForm">
-        <label>Control PIN<input id="loginPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="current-password"></label>
-        <button class="primary" type="submit">Connect</button>
+        <label><span data-i18n="common.pin"></span><input id="loginPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="current-password"></label>
+        <button class="primary" type="submit" data-i18n="login.connect"></button>
       </form>
-      <noscript><p class="muted">JavaScript is required. Enable it and reload this page.</p></noscript>
+      <noscript><p class="muted">JavaScript / JavaScript требуется</p></noscript>
     </section>
 
     <section id="remoteView" class="remote hidden">
       <header>
         <div><p class="eyebrow">SLIDELINK</p><h1 id="deviceName">Presenter</h1></div>
-        <div class="status-stack"><span id="wsStatus" class="pill offline">Offline</span><span id="usbStatus" class="pill offline">USB off</span></div>
+        <div class="status-stack"><span id="wsStatus" class="pill offline"></span><span id="usbStatus" class="pill offline"></span></div>
       </header>
       <div class="profile-row">
-        <select id="profileSelect" aria-label="Active profile"></select>
-        <button id="settingsButton" class="icon-button" aria-label="Edit profile">⚙</button>
+        <select id="profileSelect" data-i18n-aria="remote.profile"></select>
+        <button id="editProfileButton" class="icon-button" type="button" data-i18n-title="profile.edit" aria-label="Edit profile">✎</button>
+        <button id="settingsButton" class="icon-button" type="button" data-i18n-title="settings.title" aria-label="Settings">⚙</button>
       </div>
       <section class="navigation">
-        <button class="command previous" data-action="previous">PREVIOUS</button>
-        <button class="command next" data-action="next">NEXT</button>
+        <button class="command previous" type="button" data-action="previous" data-i18n="action.previous"></button>
+        <button class="command next" type="button" data-action="next" data-i18n="action.next"></button>
       </section>
       <section class="quick-grid">
-        <button class="command" data-action="start">Start</button>
-        <button class="command" data-action="start-current">Current</button>
-        <button class="command" data-action="black">Black</button>
-        <button class="command danger" data-action="stop">Stop</button>
+        <button class="command" type="button" data-action="start" data-i18n="action.start"></button>
+        <button class="command" type="button" data-action="start-current" data-i18n="action.start-current"></button>
+        <button class="command" type="button" data-action="black" data-i18n="action.black"></button>
+        <button class="command danger" type="button" data-action="stop" data-i18n="action.stop"></button>
       </section>
       <form id="gotoForm" class="goto-row">
-        <label>Slide<input id="slideNumber" type="number" min="1" max="9999" inputmode="numeric" placeholder="12" required></label>
-        <button type="submit">GO</button>
+        <label><span data-i18n="remote.slide"></span><input id="slideNumber" type="number" min="1" max="9999" inputmode="numeric" placeholder="12" required></label>
+        <button type="submit" data-i18n="remote.go"></button>
       </form>
       <section class="timer-card">
-        <div><p class="eyebrow">TIMER</p><output id="timerOutput">00:00</output></div>
-        <div class="timer-actions"><button id="timerToggle">Start</button><button id="timerReset">Reset</button></div>
+        <div><p class="eyebrow" data-i18n="remote.timer"></p><output id="timerOutput">00:00</output></div>
+        <div class="timer-actions"><button id="timerToggle" type="button"></button><button id="timerReset" type="button" data-i18n="remote.reset"></button></div>
       </section>
-      <p id="resultLine" class="result">Ready</p>
-      <p class="estimate">Slide numbers are commands, not PowerPoint feedback.</p>
+      <p id="resultLine" class="result"></p>
+      <p class="estimate" data-i18n="remote.feedbackNote"></p>
     </section>
   </main>
 
   <dialog id="profileDialog">
-    <form method="dialog" class="dialog-head"><div><p class="eyebrow">LIVE PROFILE</p><h2>Edit controls</h2></div><button class="icon-button" value="cancel">×</button></form>
+    <form method="dialog" class="dialog-head"><div><p class="eyebrow" data-i18n="profile.eyebrow"></p><h2 data-i18n="profile.title"></h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></form>
     <div class="dialog-body">
-      <label>Profile name<input id="profileName" maxlength="23"></label>
+      <label><span data-i18n="profile.name"></span><input id="profileName" maxlength="23"></label>
       <div id="bindingEditor"></div>
-      <label>Confirm PIN<input id="editPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}"></label>
-      <div class="dialog-actions"><button id="resetProfile" class="danger">Factory profile</button><button id="saveProfile" class="primary">Save profile</button></div>
+      <label><span data-i18n="profile.confirmPin"></span><input id="editPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}"></label>
+      <div class="dialog-actions"><button id="resetProfile" type="button" class="danger" data-i18n="profile.restore"></button><button id="saveProfile" type="button" class="primary" data-i18n="profile.save"></button></div>
+    </div>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form method="dialog" class="dialog-head"><div><p class="eyebrow">SLIDELINK</p><h2 data-i18n="settings.title"></h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></form>
+    <div class="dialog-body">
+      <section class="settings-section"><h3 data-i18n="settings.device"></h3><dl id="deviceDetails"></dl></section>
+      <section class="settings-section"><h3 data-i18n="settings.access"></h3><p class="muted compact" data-i18n="settings.accessHelp"></p><code>http://192.168.55.1</code><code>http://slidelink.local</code></section>
+      <form id="credentialsForm" class="settings-section">
+        <h3 data-i18n="settings.security"></h3>
+        <label><span data-i18n="settings.currentPin"></span><input id="currentPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required autocomplete="current-password"></label>
+        <label><span data-i18n="settings.newWifi"></span><input id="newWifiPassword" type="password" minlength="8" maxlength="63" autocomplete="new-password"></label>
+        <label><span data-i18n="settings.newPin"></span><input id="newPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="new-password"></label>
+        <button type="submit" class="primary" data-i18n="settings.save"></button>
+      </form>
+      <form id="firmwareForm" class="settings-section">
+        <h3 data-i18n="settings.firmwareUpdate"></h3><p class="muted compact" data-i18n="settings.firmwareHelp"></p>
+        <input id="firmwareFile" type="file" accept=".bin,application/octet-stream" required>
+        <progress id="firmwareProgress" max="100" value="0" class="hidden"></progress>
+        <button type="submit" data-i18n="settings.install"></button>
+      </form>
+      <form id="factoryForm" class="settings-section danger-zone">
+        <h3 data-i18n="settings.factory"></h3><p class="muted compact" data-i18n="settings.factoryHelp"></p>
+        <label><span data-i18n="settings.currentPin"></span><input id="factoryPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required></label>
+        <button type="submit" class="danger" data-i18n="settings.factoryButton"></button>
+      </form>
     </div>
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>

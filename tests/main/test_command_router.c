@@ -10,6 +10,9 @@
 
 TEST_CASE("router generates IDs and rejects queue overflow", "[router]")
 {
+    presenter_profile_t profile;
+    presenter_profile_factory(PRESENTER_PROFILE_POWERPOINT, &profile);
+    TEST_ASSERT_EQUAL(ESP_OK, presenter_init(&profile));
     usb_hid_test_set_mounted(true);
     usb_hid_test_set_tap_delay_ms(200);
     TEST_ASSERT_EQUAL(ESP_OK, command_router_init());
@@ -41,4 +44,37 @@ TEST_CASE("router generates IDs and rejects queue overflow", "[router]")
     TEST_ASSERT_EQUAL(COMMAND_ERROR_QUEUE_FULL, stats.last_error);
     TEST_ASSERT_EQUAL_STRING("command queue full",
                              command_router_error_name(stats.last_error));
+
+    /* Drain the intentional overflow case, then exercise more than the v1
+     * release requirement without allowing the bounded queue to hide errors. */
+    usb_hid_test_set_tap_delay_ms(0);
+    const TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(5000);
+    while (command_router_queue_depth() != 0U &&
+           xTaskGetTickCount() < deadline) {
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    vTaskDelay(pdMS_TO_TICKS(20));
+    command_router_get_stats(&stats);
+    const uint32_t executed_before_stress = stats.commands_executed;
+
+    for (uint32_t i = 0; i < 500U; ++i) {
+        uint32_t id = 0;
+        esp_err_t err;
+        do {
+            err = command_router_submit((i & 1U) == 0U ?
+                PRESENTER_COMMAND_NEXT : PRESENTER_COMMAND_PREVIOUS, 0, &id);
+            if (err == ESP_ERR_NO_MEM) vTaskDelay(pdMS_TO_TICKS(1));
+        } while (err == ESP_ERR_NO_MEM);
+        TEST_ASSERT_EQUAL(ESP_OK, err);
+        TEST_ASSERT_NOT_EQUAL(0U, id);
+    }
+    const TickType_t stress_deadline = xTaskGetTickCount() + pdMS_TO_TICKS(5000);
+    do {
+        command_router_get_stats(&stats);
+        if (stats.commands_executed >= executed_before_stress + 500U) break;
+        vTaskDelay(pdMS_TO_TICKS(5));
+    } while (xTaskGetTickCount() < stress_deadline);
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(executed_before_stress + 500U,
+                                       stats.commands_executed);
+    TEST_ASSERT_EQUAL_UINT32(0U, stats.commands_failed);
 }

@@ -21,6 +21,7 @@
 
 extern const uint8_t slidelink_hid_report_descriptor[];
 extern const uint8_t slidelink_configuration_descriptor[];
+extern const tusb_desc_device_t slidelink_device_descriptor;
 
 static const char *TAG = "USB_HID";
 static SemaphoreHandle_t s_report_complete;
@@ -29,10 +30,11 @@ static usb_hid_state_t s_state;
 static char s_serial[12];
 static const char *s_string_descriptor[] = {
     (const char[]){0x09, 0x04},
-    "Maggogerka",
-    "SlideLink USB Presenter",
+    CONFIG_SLIDELINK_USB_MANUFACTURER,
+    "SlideLink Presenter",
     s_serial,
     "SlideLink HID Keyboard",
+    "",
 };
 
 static void tinyusb_event_handler(tinyusb_event_t *event, void *argument)
@@ -131,7 +133,7 @@ esp_err_t usb_hid_init(void)
                    mac[2], mac[3], mac[4], mac[5]);
 
     tinyusb_config_t config = TINYUSB_DEFAULT_CONFIG(tinyusb_event_handler);
-    config.descriptor.device = NULL;
+    config.descriptor.device = &slidelink_device_descriptor;
     config.descriptor.full_speed_config = slidelink_configuration_descriptor;
     config.descriptor.string = s_string_descriptor;
     config.descriptor.string_count = sizeof(s_string_descriptor) / sizeof(s_string_descriptor[0]);
@@ -146,7 +148,7 @@ esp_err_t usb_hid_init(void)
         return err;
     }
 
-    ESP_LOGI(TAG, "initialized product='SlideLink USB Presenter' serial='%s'", s_serial);
+    ESP_LOGI(TAG, "initialized composite HID+NCM product='SlideLink Presenter' serial='%s'", s_serial);
     return ESP_OK;
 }
 

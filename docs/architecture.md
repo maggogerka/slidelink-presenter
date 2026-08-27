@@ -1,64 +1,75 @@
 # Architecture
 
-SlideLink separates inputs, presentation intent, persistent configuration and
-USB transport. Neither the web API nor UART can submit arbitrary HID reports.
+SlideLink has one presentation-intent path and transport-independent HTTP
+backend. Web, UART, and physical buttons can request only typed commands; none
+can submit arbitrary HID reports.
 
 ```text
-UART console ----\
-BOOT button ------> command_router --> presenter/profile snapshot --> usb_hid --> TinyUSB
-HTTP API --------/        |                         ^
-                          +--> WebSocket results    |
-web UI --> session auth --> web_server --> profile_store (NVS + CRC32)
-                 |              |
-                 +--> Wi-Fi AP --+--> device_state
+                         +--> USB HID keyboard --> presentation software
+buttons --\              |
+UART ------> command_router --> presenter/profile allowlist
+HTTP/WS --/       |      |
+                  |      +--> bounded key taps + explicit release
+                  +--> result callback --> WebSocket
+
+browser --> HTTP server --> session/settings/profiles/OTA
+                ^    ^
+                |    +-- Wi-Fi SoftAP 192.168.4.1 (fallback)
+                +------- USB NCM 192.168.55.1 (primary, no gateway/DNS)
 ```
 
-## Components
+## Composite USB
 
-### `usb_hid`
+The TinyUSB device uses the Miscellaneous/Common/IAD device class required for
+a composite NCM device on Windows. Full-speed endpoints are:
 
-Owns descriptors, TinyUSB lifecycle, chip-derived serial, coherent USB-state
-snapshots and the session counter. A key tap has bounded endpoint waits, a
-20 ms hold and an explicit all-keys-released report. Any transport failure
-attempts another release. The descriptor does not advertise remote wakeup;
-commands are rejected while the host is suspended.
+| Function | Endpoint |
+|---|---|
+| HID keyboard | interrupt IN 1 |
+| NCM notifications | interrupt IN 2 |
+| NCM data | bulk OUT 3 / IN 3 |
 
-### `presenter` and `profile_store`
+This fits the ESP32-S3 endpoint allocation while keeping HID independent of the
+network stack. The device descriptor is owned by `usb_hid`; `usb_network`
+attaches an Ethernet-style `esp_netif`, DHCP server, and TinyUSB NCM callbacks.
+TinyUSB RX memory is copied before passing it to the asynchronous network stack.
 
-`presenter` validates and executes presentation bindings. Profiles contain no
-more than four steps per action and use only the key/modifier allowlist. Per-step
-and total delays are bounded. `profile_store` keeps six fixed-ID profiles, the
-active ID, a schema version and CRC32 in one NVS blob. Invalid or incompatible
-storage is replaced with factory defaults.
+The USB DHCP server provides a host address and `/24` subnet only. Router and
+DNS DHCP options are explicitly disabled, and the ESP route priority is below
+normal interfaces. SlideLink therefore does not become the Windows default
+route or DNS server.
 
-### `command_router`
+## Command safety
 
-Allocates non-zero request IDs, accepts at most eight pending items and runs one
-worker. Each item snapshots USB session, profile ID and profile revision.
-Disconnects, resets and profile changes invalidate queued work. Result callbacks
-publish `executed` or `failed` with duration and an error enum; formatting is
-outside critical sections.
+`command_router` serializes work through an eight-item queue. Every item
+captures its USB session plus profile ID/revision. Disconnect, reset, or profile
+change invalidates stale work. HID waits are bounded, every successful press is
+followed by a release, and error paths make a best-effort all-keys release.
 
-### `session_manager`, `wifi_manager` and `web_server`
+`presenter` accepts only the compiled key/modifier allowlist. A profile binding
+has at most four steps and bounded delays. Profile updates stop intake, empty
+the queue, wait for active execution, release keys, and atomically publish the
+new revision.
 
-`session_manager` owns provisioning, PIN verification, login throttling and up
-to four RAM-only session tokens. `wifi_manager` creates a WPA2/PMF SoftAP with
-at most two clients and advertises `slidelink.local` by mDNS. `web_server`
-serves compiled-in assets plus the authenticated JSON API and WebSocket.
+## Persistence and updates
 
-### `presenter_console` and `presenter_button`
+- `profile_store`: six fixed profiles in a CRC-protected, schema-versioned NVS
+  blob; corrupt data falls back to factory profiles.
+- `session_manager`: schema migration, unique setup credential, Wi-Fi password,
+  PIN salt/KDF result, and no plaintext PIN.
+- `firmware_update`: streams directly to the inactive OTA partition, validates
+  the ESP image and project name, changes the boot partition only after success,
+  and confirms the new image only after all application subsystems initialize.
+- `partitions.csv`: encrypted-capable NVS, OTA metadata, NVS key partition,
+  coredump, and two 3 MiB OTA application slots on 16 MiB flash.
 
-The console retains the bounded v0.1 UART parser and reports the ESP-IDF project
-version. GPIO0 is sampled every 10 ms with 40 ms debounce. It stays disarmed
-until released after boot. Short and one-second holds submit Next/Previous; an
-eight-second hold erases security/profile configuration and restarts.
+## Inputs
 
-## Concurrency and failure behavior
+Input policy is configured, not embedded in presentation logic:
 
-- USB lifecycle state is copied under one `portMUX` as a coherent snapshot.
-- Profile data is protected by mutexes and published to `presenter` atomically.
-- Profile changes pause command intake, clear the queue and release all keys.
-- Endpoint busy waits are bounded; errors cannot leave a key intentionally held.
-- Queue full rejects the new item and never overwrites an old command.
-- Reset loses all RAM queue/session state; no key report is emitted at boot.
-- Static assets require no CDN, DNS server or Internet connection.
+- development default GPIO0: short Next, >=1 s Previous, >=8 s reset;
+- production PCB: configurable Next GPIO and optional independent Previous GPIO;
+- RST/EN remains hardware reset.
+
+Sampling is 10 ms with 40 ms debounce. A button held during boot is disarmed
+until released, preventing an accidental command or factory reset.

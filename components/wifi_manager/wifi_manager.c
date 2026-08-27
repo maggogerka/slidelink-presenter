@@ -81,6 +81,11 @@ esp_err_t wifi_manager_init(void)
                         TAG, "mDNS HTTP service");
     ESP_LOGI(TAG, "SoftAP ssid='%s' ip=%s max_clients=2 setup=%s", s_state.ssid,
              s_state.ip, setup ? "yes" : "no");
+#if CONFIG_SLIDELINK_DEVELOPMENT_BUILD
+    if (setup) {
+        ESP_LOGW(TAG, "development setup credential: %s", password);
+    }
+#endif
     return ESP_OK;
 }
 

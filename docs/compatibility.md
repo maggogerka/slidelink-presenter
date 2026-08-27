@@ -1,46 +1,46 @@
-# Compatibility
+# Compatibility matrix
 
-Only combinations actually exercised are marked verified.
+Only an end-to-end run on the exact v1 composite firmware is marked Pass.
+Compiled profiles are not treated as application validation.
 
-| Host | Application | Connection | Status | Notes |
-|---|---|---|---|---|
-| Windows 10 Pro 22H2, build 19045 | PowerPoint 16.0, build 14332 | Native USB HID + SoftAP web API | Pass | Full command and 200-switch run on 2026-07-18 |
-| Windows 11 | Microsoft PowerPoint | Native USB HID | Not tested | No claim |
-| Any | Google Slides | Browser | Not tested | Default profile supplied, application validation pending |
-| Any | LibreOffice Impress | Native USB HID | Not tested | LibreOffice was not installed on the Windows 10 validation host; default profile supplied |
-| Any | PDF viewer | Native USB HID | Not tested | Viewer shortcuts vary |
+| Host / client | Scenario | Product v1 status | Notes |
+|---|---|---|---|
+| Windows 11 25H2, build 26200.9168 | Firmware boot, SoftAP and HTTP/NCM backend initialization | Pass, 2026-08-27 | Clean boot to `ready` on the connected ESP32-S3; NCM DHCP starts at `192.168.55.1` with no gateway/DNS offers |
+| Windows 11 25H2, build 26200.9168 | HID + USB NCM host enumeration | Blocked by physical connection | Only the CH343 USB-UART connector was attached; connect the separate native USB/OTG data port |
+| Windows 11 Chrome | Web UI over `192.168.55.1` | Pending hardware/browser run | RU/EN static validation passes |
+| Windows 11 Edge 151.0.4129.107 | Static UI boot and RU rendering | Pass, 2026-08-27 | Headless browser loaded HTML, CSS, JS and manifest; device API over NCM remains pending |
+| Microsoft 365 PowerPoint | Full command set | Pending manual run | PowerPoint profile included |
+| Google Slides / Chrome | Full command set | Pending manual run | Google Slides profile included |
+| Google Slides / Edge | Full command set | Pending manual run | Google Slides profile included |
+| LibreOffice Impress | Full command set | Not run; application absent | LibreOffice profile included |
+| Chrome/Edge PDF viewer | Presentation/navigation | Pending manual run | Generic PDF profile included; viewer shortcuts vary |
+| Android Chrome | Responsive web remote | Pending real-device run | Mobile-first layout implemented |
+| iPhone Safari | Responsive web remote | Pending real-device run | Safe-area layout implemented |
 
-The phone session shown in the README GIF confirms the responsive web UI in a
-real mobile browser. Its exact phone OS and browser builds were not recorded,
-so it is deliberately not listed as a verified environment above.
+## Development hardware observed for v1
 
-## Development-board validation
-
-| Item | Result |
+| Item | Observed |
 |---|---|
-| Board MCU | ESP32-S3 QFN56 revision 0.2 |
-| USB-UART | CH343 on COM10 |
+| MCU | ESP32-S3 QFN56 rev 0.2 |
+| Flash | 16 MiB |
+| Embedded PSRAM | 8 MiB |
+| Flash/UART port | COM3 |
 | ESP-IDF | 6.0.2 |
-| Production v0.2.0 build and verified flash | Pass (2026-07-18) |
-| UART boot and version metadata | Pass |
-| On-device Unity suite | Pass: 11 tests, 0 failures, 0 ignored |
-| Native USB enumeration | Pass: `HID\\VID_303A&PID_4004`, HID keyboard started |
-| Web assets and authenticated API | Pass: setup, login, six profiles, edit/test/reset/activate |
-| NVS profile persistence across reset | Pass |
-| PowerPoint end-to-end command set | Pass |
-| 200 alternating slide commands | Pass: final position matched start |
-| Five resets while PowerPoint was open | Pass: no spontaneous movement |
-| Reset with queued commands | Pass: no stale replay after reconnect |
-| Physical native-USB cable removal with a full queue | Pass: depth 8, detach session 1→2, remount session 3, queue remained empty |
-| Windows sleep/resume | Pass: Windows event IDs 42/1 and post-resume HID advanced PowerPoint |
+| Development USB identity | `303A:4005`, composite HID + NCM |
+| UART bridge | CH343, `USB VID_1A86:PID_55D3`, COM3 |
 
-The Unity suite was executed manually on the ESP32-S3 over COM10. GitHub
-Actions only compiles test firmware because the runner has no attached board.
+The on-device Unity suite passed 11/11 tests on this board, including a bounded
+queue-overflow case followed by 500 alternating Next/Previous executions with
+zero command failures. This proves the command path and HID report generation;
+it does not replace host-side enumeration and presentation-application tests.
 
-The PowerPoint automation created a 12-slide presentation, observed each slide
-position/state through the PowerPoint object model, and sent every command
-through the ESP32 HTTP API and real native USB HID path. The physical cable
-test filled all eight queue slots, observed TinyUSB detach/remount and verified
-an empty queue five seconds after reconnection. Windows recorded sleep at
-06:42:14 and wake at 06:42:32; the first post-resume HID command advanced
-PowerPoint from slide 1 to slide 2.
+The board model/schematic was not present in the repository and cannot be
+derived from the chip ID. GPIO0 is therefore retained as the documented BOOT
+default; RST/EN is treated only as hardware reset. Record the exact board and
+native-USB connector before turning this into a production PCB definition.
+
+Historical v0.2 HID-only tests on Windows 10 do not prove the v1 NCM composite
+path and are intentionally not reported as v1 passes.
+
+Update this file with OS/browser/application build numbers, date, cables, and
+objective results after every release qualification run.

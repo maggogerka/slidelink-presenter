@@ -1,0 +1,39 @@
+menu "SlideLink product configuration"
+
+config SLIDELINK_DEVELOPMENT_BUILD
+    bool "Development build"
+    default y
+    help
+        Enables development-only diagnostics such as printing the unique initial
+        setup credential on UART. Disable this in the production configuration.
+
+config SLIDELINK_USB_VID
+    hex "USB vendor ID"
+    range 0x0001 0xFFFF
+    default 0x303A
+    help
+        Espressif's VID is suitable only for development. Commercial hardware
+        must use a VID/PID assigned or sublicensed to the manufacturer.
+
+config SLIDELINK_USB_PID
+    hex "USB product ID"
+    range 0x0001 0xFFFF
+    default 0x4005
+
+config SLIDELINK_USB_MANUFACTURER
+    string "USB manufacturer"
+    default "SlideLink"
+
+config SLIDELINK_BUTTON_NEXT_GPIO
+    int "NEXT / single-button GPIO"
+    range 0 48
+    default 0
+    help
+        GPIO 0 is the BOOT button on the supported development board.
+
+config SLIDELINK_BUTTON_PREVIOUS_GPIO
+    int "Optional dedicated PREVIOUS GPIO (-1 disables)"
+    range -1 48
+    default -1
+
+endmenu

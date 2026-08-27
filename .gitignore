@@ -57,6 +57,12 @@ managed_components/
 sdkconfig
 sdkconfig.old
 /build-tests/
+/build-product/
+/.cache/
+/keys/
+/provisioning-output/
+__pycache__/
+*.py[cod]
 
 # Editors and local tooling
 .vscode/
