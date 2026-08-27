@@ -8,16 +8,24 @@ jobs:
   firmware:
     runs-on: ubuntu-latest
     container: espressif/idf:v6.0.2
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate embedded UI
         run: python3 tools/validate_frontend.py
       - name: Build development firmware
-        run: idf.py set-target esp32s3 build
+        run: |
+          source /opt/esp/idf/export.sh
+          idf.py set-target esp32s3 build
       - name: Compile Unity test firmware
-        run: idf.py -C tests -B build-tests set-target esp32s3 build
+        run: |
+          source /opt/esp/idf/export.sh
+          idf.py -C tests -B build-tests set-target esp32s3 build
       - name: Build production security profile with ephemeral CI key
         run: |
+          source /opt/esp/idf/export.sh
           mkdir -p keys
           espsecure.py generate-signing-key --version 2 --scheme rsa3072 keys/production_signing_key.pem
           idf.py -B build-product -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.production.defaults" set-target esp32s3 build
